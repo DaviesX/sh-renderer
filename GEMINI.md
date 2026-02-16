@@ -83,6 +83,7 @@ The engine uses a Forward+ architecture. Do not suggest or write code for Deferr
 * **Step 4: The Depth Pre-pass**
 * **Goal:** Create a Framebuffer Object (FBO) with a depth attachment. Render the scene's opaque geometry into it using a depth-only shader. This is mandatory for Forward+ culling.
 * **Verification:** Render the resulting depth buffer to a fullscreen quad. Linearize the depth values in the debug shader so closer objects appear darker and distant objects appear lighter, confirming the buffer is populated correctly.
+* Note: During the subsequent Forward passes, ensure glDepthFunc(GL_LEQUAL) is set.
 
 
 ### Phase 3: Forward Pipeline with Shadowed Sun
@@ -105,21 +106,17 @@ The engine uses a Forward+ architecture. Do not suggest or write code for Deferr
 
 ### Phase 4: Compute-Based Light Culling
 
-* **Step 8: The Depth Pre-pass**
-* **Goal:** Create a Framebuffer Object (FBO) with a depth attachment. Render the scene geometry into it using a depth-only shader. This is mandatory for Forward+ culling.
-* **Verification:** Render the resulting depth buffer to a fullscreen quad. Linearize the depth values in the debug shader so closer objects appear darker and distant objects appear lighter, confirming the buffer is populated correctly.
-
-* **Step 9: Scene Light Management (SSBO)**
+* **Step 8: Scene Light Management (SSBO)**
 * **Goal:** Define a standard `Light` struct (Position, Radius, Color, Intensity). Push an array of hundreds of test point lights to the GPU via an SSBO.
 * **Verification:** Read back the SSBO data on the CPU to ensure data alignment (std430) is correct, or use a simple debug shader to draw tiny unlit spheres at the light positions.
 
 
-* **Step 10: Compute Shader - Min/Max Depth & Frustum**
+* **Step 9: Compute Shader - Min/Max Depth & Frustum**
 * **Goal:** Split the screen into 16x16 pixel tiles. Write a Compute Shader where each thread group (representing a tile) calculates the minimum and maximum depth from the depth pre-pass using atomic operations. Then, calculate the tile's view-space frustum planes.
 * **Verification:** Output the min/max depth values to a debug texture and visualize it on-screen to ensure the depth bounds map correctly to the geometry.
 
 
-* **Step 11: Compute Shader - Light Intersection**
+* **Step 10: Compute Shader - Light Intersection**
 * **Goal:** In the same compute shader, intersect the tile's frustum with all lights in the scene. Store the active light indices for that tile into a global light index SSBO.
 * **Verification:** Output a "heatmap" texture where tile brightness correlates to the number of intersecting lights (e.g., black = 0 lights, white = max lights). You should clearly see the tiles lighting up around your test light spheres.
 
@@ -127,7 +124,7 @@ The engine uses a Forward+ architecture. Do not suggest or write code for Deferr
 
 ### Phase 5: Forward+ Shading
 
-* **Step 12: Direct PBR Shading (Forward+)**
+* **Step 11: Direct PBR Shading (Forward+)**
 * **Goal:** Write the final Forward fragment shader. For each pixel, determine its screen-space tile, read the list of active light indices from the SSBO, and loop *only* over those lights to compute the glTF direct lighting.
 * **Verification:** Hundreds of dynamic lights rendering at high framerates with correct specular highlights, without performance tanking.
 
@@ -135,16 +132,16 @@ The engine uses a Forward+ architecture. Do not suggest or write code for Deferr
 
 ### Phase 6: Dynamic Shadows
 
-* **Step 13: Light Importance Ranking**
+* **Step 12: Light Importance Ranking**
 * **Goal:**  Frustum cull lights based on their bounding box. Rank lights by form factor (`flux/distance^2`).
 * **Verification:**  Log the ranking to console.
 
 
-* **Step 14: The Shadow Atlas**
+* **Step 13: The Shadow Atlas**
 * **Goal:** Create a 2048x2048 depth texture atlas for important dynamic lights. Top 2 lights consume two 1024x1024 tiles each. The following 4 lights consume 512x512 tiles each. The remaining 16 lights consume 256x256 tiles each. Point lights don't cast shadow. Render their shadow maps in a pass before the depth pre-pass.
 * **Verification:** Visualize the shadow atlas texture array on-screen to ensure the 22 shadow maps are updating dynamically.
 
 
-* **Step 15: Final Shadow Application**
-* **Goal:** In the Step 12 Forward+ shader, sample the shadow atlas with Percentage-Closer Filtering (PCF) during the direct light evaluation.
+* **Step 14: Final Shadow Application**
+* **Goal:** In the Step 11 Forward+ shader, sample the shadow atlas with Percentage-Closer Filtering (PCF) during the direct light evaluation.
 * **Verification:** Smooth, dynamic shadows that correctly occlude both characters and the environment without double-shadowing artifacts.
