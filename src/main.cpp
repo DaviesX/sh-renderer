@@ -32,12 +32,13 @@ void Run(const std::filesystem::path& scene_path) {
   };
 
   InputState input_state;
+  InteractionState interaction_state;
   bool should_close = false;
 
   while (!glfwWindowShouldClose(*window) && !should_close) {
     // Process all queued input events.
     while (auto event = PollInputEvent(*window, &input_state)) {
-      HandleInputEvent(*event, &camera, &should_close);
+      HandleInputEvent(*event, &interaction_state, &camera, &should_close);
     }
 
     // Get the current framebuffer size for the viewport.

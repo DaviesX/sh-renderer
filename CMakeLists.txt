@@ -118,6 +118,7 @@ target_link_libraries(sh_renderer_main PRIVATE
 enable_testing()
 
 add_executable(sh_renderer_test
+    src/camera_test.cpp
     src/gl_common_test.cpp
     src/input_test.cpp
     src/interaction_test.cpp
