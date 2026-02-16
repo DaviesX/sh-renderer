@@ -1,5 +1,6 @@
 #pragma once
 
+#include "camera.h"
 #include "input.h"
 
 namespace sh_renderer {

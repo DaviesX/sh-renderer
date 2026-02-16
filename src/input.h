@@ -4,14 +4,19 @@
 #include <optional>
 #include <variant>
 
-#include "camera.h"
 #include "window.h"
 
 namespace sh_renderer {
 
-// Key code.
-using KeyPressEvent = char;
-using KeyReleaseEvent = char;
+// Key press event (distinct type for variant discrimination).
+struct KeyPressEvent {
+  char key;
+};
+
+// Key release event (distinct type for variant discrimination).
+struct KeyReleaseEvent {
+  char key;
+};
 
 // Normalized delta position.
 using MouseDragEvent = Eigen::Vector2f;

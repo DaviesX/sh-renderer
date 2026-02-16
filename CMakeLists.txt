@@ -23,6 +23,7 @@ find_package(glog REQUIRED)
 find_package(gflags REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(glfw3 REQUIRED)
+find_package(GLEW REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
@@ -66,20 +67,24 @@ target_include_directories(tinyexr INTERFACE ${TINYEXR_INCLUDE_DIR})
 
 # Renderer library
 set(LIB_SOURCES 
+    src/camera.cpp
     src/gl_common.cpp
     src/input.cpp
     src/interaction.cpp
     src/implementations.cpp
     src/loader.cpp
-    src/scene.cpp)
+    src/scene.cpp
+    src/window.cpp)
 
 set(LIB_HEADERS
+    src/camera.h
     src/colorspace.h
     src/gl_common.h
     src/input.h
     src/interaction.h
     src/loader.h
-    src/scene.h)
+    src/scene.h
+    src/window.h)
 
 add_library(sh_renderer SHARED ${LIB_SOURCES} ${LIB_HEADERS})
 target_include_directories(sh_renderer PUBLIC 
@@ -90,6 +95,7 @@ target_link_libraries(sh_renderer PUBLIC
     gflags
     OpenGL::GL
     glfw
+    GLEW::GLEW
     Eigen3::Eigen
     tinygltf
     nlohmann_json
