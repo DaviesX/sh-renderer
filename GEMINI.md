@@ -6,9 +6,10 @@ You are assisting in the development of a custom 3D rendering engine built from 
 ```bash
 cmake -DCMAKE_BUILD_TYPE=Release -B build -S . && cmake --build build --parallel 12 && ./build/sh_baker_test
 ```
+- **Coding Style:** google c++ style guide. Prefer free functions over classes unless the states are complex.
+- **Language:** C++20
 
 ## Technology Stack
-- **Language:** Modern C++ (C++20 preferred).
 - **Build System** CMake
 - **Testing Framework:** googletest (find_package)
 - **Logging Library:** glog (find_package)
