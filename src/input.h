@@ -37,6 +37,6 @@ namespace input_internal {
 
 // Polls for the next input event. Returns std::nullopt if no event is
 // available.
-std::optional<InputEvent> PollInputEvent(Window *window, InputState *state);
+std::optional<InputEvent> PollInputEvent(Window window, InputState *state);
 
 }  // namespace sh_renderer

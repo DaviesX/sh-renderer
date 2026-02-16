@@ -1,3 +1,14 @@
 #include "input.h"
 
-namespace sh_renderer {}  // namespace sh_renderer
+#include <glog/logging.h>
+
+#include <optional>
+
+namespace sh_renderer {
+
+std::optional<InputEvent> PollInputEvent(Window window, InputState *state) {
+  // TODO: Implement input polling.
+  return std::nullopt;
+}
+
+}  // namespace sh_renderer

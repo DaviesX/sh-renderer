@@ -7,7 +7,7 @@
 
 namespace sh_renderer {
 
-using Window = GLFWwindow;
+using Window = GLFWwindow *;
 
 /*
  * @brief Creates a new window.
@@ -24,6 +24,6 @@ std::optional<Window> CreateWindow(unsigned width, unsigned height,
  * @brief Destroys the given window.
  * @param window The window to destroy.
  */
-void DestroyWindow(Window *window);
+void DestroyWindow(Window window);
 
 }  // namespace sh_renderer

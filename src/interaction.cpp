@@ -1,5 +1,10 @@
 #include "interaction.h"
 
+#include <glog/logging.h>
+
+#include "camera.h"
+#include "input.h"
+
 namespace sh_renderer {
 
 void HandleInputEvent(const InputEvent &event, Camera *camera,
