@@ -4,7 +4,7 @@ You are assisting in the development of a custom 3D rendering engine built from 
 ## Tips
 - Build and test the project using the following commands:
 ```bash
-cmake -DCMAKE_BUILD_TYPE=Release -B build -S . && cmake --build build --parallel 12 && ./build/sh_baker_test
+cmake -DCMAKE_BUILD_TYPE=Release -B build -S . && cmake --build build --parallel 12 && ./build/sh_renderer_test
 ```
 - **Coding Style:** google c++ style guide. Prefer free functions over classes unless the states are complex.
 - **Language:** C++20
@@ -57,14 +57,18 @@ The engine uses a Forward+ architecture. Do not suggest or write code for Deferr
 ### Phase 0: Build System
 
 * **Step 0: CMake Project Setup**
-* **Goal:** Initialize a CMake project with a basic build configuration.
+* **Goal:** Initialize a CMake project with a basic build configuration. Source files go to the `src` directory.
+* **Verification:** A successful build with no errors.
+
+* **Step 0.5: Main Entry**
+* **Goal:** Add a `src/main.cpp`. The program accept an argument `--input` that specifies the path to a glTF scene file. Initializes GLOG and GFLAGS properly. Set namespace to `sh_renderer`.
 * **Verification:** A successful build with no errors.
 
 
 ### Phase 1: Engine Foundation & DSA
 
 * **Step 1: Window & OpenGL 4.6 Context**
-* **Goal:** Initialize your windowing library (GLFW/SDL), load the OpenGL 4.6 Core profile, and establish the main render loop.
+* **Goal:** Initialize your windowing library (GLFW), implement camera interactions, load the OpenGL 4.6 Core profile, and establish the main render loop.
 * **Verification:** A clear screen with a specific clear color. No legacy OpenGL errors are thrown.
 
 
