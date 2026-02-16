@@ -57,7 +57,11 @@ The engine uses a Forward+ architecture. Do not suggest or write code for Deferr
 ### Phase 0: Build System
 
 * **Step 0: CMake Project Setup**
-* **Goal:** Initialize a CMake project with a basic build configuration.
+* **Goal:** Initialize a CMake project with a basic build configuration. Source files go to the `src` directory.
+* **Verification:** A successful build with no errors.
+
+* **Step 0.5: Main Entry**
+* **Goal:** Add a `src/main.cpp`. The program accept an argument `--input` that specifies the path to a glTF scene file. Initializes GLOG and GFLAGS properly. Set namespace to `sh_renderer`.
 * **Verification:** A successful build with no errors.
 
 

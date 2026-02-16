@@ -1,0 +1,14 @@
+[
+{
+  "directory": "/home/davis/sh-renderer/build",
+  "command": "/usr/bin/g++ -DGFLAGS_IS_A_DLL=0 -DGLOG_CUSTOM_PREFIX_SUPPORT -isystem /usr/include/eigen3 -O3 -DNDEBUG -std=c++20 -o CMakeFiles/sh_renderer.dir/src/renderer_main.cpp.o -c /home/davis/sh-renderer/src/renderer_main.cpp",
+  "file": "/home/davis/sh-renderer/src/renderer_main.cpp",
+  "output": "CMakeFiles/sh_renderer.dir/src/renderer_main.cpp.o"
+},
+{
+  "directory": "/home/davis/sh-renderer/build",
+  "command": "/usr/bin/g++ -DGFLAGS_IS_A_DLL=0 -DGLOG_CUSTOM_PREFIX_SUPPORT -isystem /usr/include/eigen3 -O3 -DNDEBUG -std=c++20 -o CMakeFiles/sh_renderer.dir/src/implementations.cpp.o -c /home/davis/sh-renderer/src/implementations.cpp",
+  "file": "/home/davis/sh-renderer/src/implementations.cpp",
+  "output": "CMakeFiles/sh_renderer.dir/src/implementations.cpp.o"
+}
+]
