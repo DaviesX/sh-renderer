@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(sh_renderer_main VERSION 0.1.0 LANGUAGES CXX)
+project(sh_renderer_main VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -8,13 +8,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_compile_options(
   $<$<CONFIG:Release>:-O3>
-  $<$<CONFIG:Release>:-flto=auto>
   $<$<CONFIG:Release>:-march=native>
   $<$<CONFIG:Debug>:-fsanitize=address>
   $<$<CONFIG:Debug>:-fno-omit-frame-pointer>
 )
 add_link_options(
-  $<$<CONFIG:Release>:-flto=auto>
   $<$<CONFIG:Release>:-O3>
   $<$<CONFIG:Debug>:-fsanitize=address>
 )
@@ -26,6 +24,8 @@ find_package(gflags REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(Threads REQUIRED)
+find_package(ZLIB REQUIRED)
 
 find_path(TINYGLTF_INCLUDE_DIR tiny_gltf.h)
 if(NOT TINYGLTF_INCLUDE_DIR)
@@ -66,11 +66,15 @@ target_include_directories(tinyexr INTERFACE ${TINYEXR_INCLUDE_DIR})
 
 # Renderer library
 set(LIB_SOURCES 
-    src/loop.cpp
+    src/gl_common.cpp
+    src/input.cpp
+    src/interaction.cpp
     src/implementations.cpp)
 
 set(LIB_HEADERS
-    src/loop.h)
+    src/gl_common.h
+    src/input.h
+    src/interaction.h)
 
 add_library(sh_renderer SHARED ${LIB_SOURCES} ${LIB_HEADERS})
 target_include_directories(sh_renderer PUBLIC 
@@ -86,6 +90,8 @@ target_link_libraries(sh_renderer PUBLIC
     nlohmann_json
     stb_image
     tinyexr
+    Threads::Threads
+    ZLIB::ZLIB
 )
 
 # Main executable
@@ -101,7 +107,10 @@ target_link_libraries(sh_renderer_main PRIVATE
 enable_testing()
 
 add_executable(sh_renderer_test
-    src/loop_test.cpp
+    src/gl_common_test.cpp
+    src/input_test.cpp
+    src/interaction_test.cpp
+    src/window_test.cpp
 )
 
 target_link_libraries(sh_renderer_test PRIVATE

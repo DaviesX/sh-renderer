@@ -44,5 +44,5 @@
 build
 
 # ignore cache directory
-.cache
+.cache/
 deps/

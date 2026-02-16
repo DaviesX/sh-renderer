@@ -5,15 +5,12 @@
 #include <string>
 
 DEFINE_string(input, "", "Path to the glTF scene file to render.");
+DEFINE_uint32(width, 1280, "Width of the window.");
+DEFINE_uint32(height, 720, "Height of the window.");
 
-namespace sh_renderer {
-
-void RunRenderer(const std::filesystem::path& scene_path) {
-  LOG(INFO) << "Starting renderer with scene: " << scene_path;
-  // TODO(renderer): Initialize window and load scene.
+void Run(const std::filesystem::path& scene_path) {
+  // TODO: Initialize window and start the main loop.
 }
-
-}  // namespace sh_renderer
 
 int main(int argc, char** argv) {
   gflags::SetUsageMessage("Simulating mixed lighting renderer.");
@@ -29,7 +26,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  sh_renderer::RunRenderer(FLAGS_input);
+  Run(FLAGS_input);
 
   gflags::ShutDownCommandLineFlags();
   return 0;
