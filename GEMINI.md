@@ -81,49 +81,70 @@ The engine uses a Forward+ architecture. Do not suggest or write code for Deferr
 
 
 * **Step 4: The Depth Pre-pass**
-* **Goal:** Create a Framebuffer Object (FBO) with a depth attachment. Render the scene geometry into it using a depth-only shader. This is mandatory for Forward+ culling.
+* **Goal:** Create a Framebuffer Object (FBO) with a depth attachment. Render the scene's opaque geometry into it using a depth-only shader. This is mandatory for Forward+ culling.
 * **Verification:** Render the resulting depth buffer to a fullscreen quad. Linearize the depth values in the debug shader so closer objects appear darker and distant objects appear lighter, confirming the buffer is populated correctly.
 
 
+### Phase 3: Forward Pipeline with Shadowed Sun
 
-### Phase 3: Compute-Based Light Culling
 
-* **Step 5: Scene Light Management (SSBO)**
+* **Step 5: Direct PBR Shading (Forward)**
+* **Goal:** Write the final Forward fragment shader. For each pixel, evaluate the glTF PBR BRDF against the sun light.
+* **Verification:** The scene is rendered with correct PBR lighting.
+
+
+* **Step 6: Shadowed Sun (CSM)**
+* **Goal:** Implement Cascaded Shadow Maps for the sun light.
+* **Verification:** The scene is rendered with correct shadows.
+
+
+* **Step 7: Integrating Baked Indirect SH**
+* **Goal:** Pass your baked 3rd-order SH texture maps into the shader. Evaluate the SH irradiance (use the cosine factors from Ramamoorthi and Hanrahan) for the indirect diffuse term. Evaluate the SH radiance at the direction of reflection vector for the indirect specular term. Add the indirect contribution to the final PBR lighting equation.
+* **Verification:** Soft, multi-directional indirect light blends seamlessly with the sharp, real-time direct specular highlights. Visually no artifacts are introduced.
+
+
+### Phase 4: Compute-Based Light Culling
+
+* **Step 8: The Depth Pre-pass**
+* **Goal:** Create a Framebuffer Object (FBO) with a depth attachment. Render the scene geometry into it using a depth-only shader. This is mandatory for Forward+ culling.
+* **Verification:** Render the resulting depth buffer to a fullscreen quad. Linearize the depth values in the debug shader so closer objects appear darker and distant objects appear lighter, confirming the buffer is populated correctly.
+
+* **Step 9: Scene Light Management (SSBO)**
 * **Goal:** Define a standard `Light` struct (Position, Radius, Color, Intensity). Push an array of hundreds of test point lights to the GPU via an SSBO.
 * **Verification:** Read back the SSBO data on the CPU to ensure data alignment (std430) is correct, or use a simple debug shader to draw tiny unlit spheres at the light positions.
 
 
-* **Step 6: Compute Shader - Min/Max Depth & Frustum**
+* **Step 10: Compute Shader - Min/Max Depth & Frustum**
 * **Goal:** Split the screen into 16x16 pixel tiles. Write a Compute Shader where each thread group (representing a tile) calculates the minimum and maximum depth from the depth pre-pass using atomic operations. Then, calculate the tile's view-space frustum planes.
 * **Verification:** Output the min/max depth values to a debug texture and visualize it on-screen to ensure the depth bounds map correctly to the geometry.
 
 
-* **Step 7: Compute Shader - Light Intersection**
+* **Step 11: Compute Shader - Light Intersection**
 * **Goal:** In the same compute shader, intersect the tile's frustum with all lights in the scene. Store the active light indices for that tile into a global light index SSBO.
 * **Verification:** Output a "heatmap" texture where tile brightness correlates to the number of intersecting lights (e.g., black = 0 lights, white = max lights). You should clearly see the tiles lighting up around your test light spheres.
 
 
 
-### Phase 4: Shading & Mixed Lighting
+### Phase 5: Forward+ Shading
 
-* **Step 8: Direct PBR Shading (Forward+)**
-* **Goal:** Write the final Forward fragment shader. For each pixel, determine its screen-space tile, read the list of active light indices from the SSBO, and loop *only* over those lights to compute the Cook-Torrance BRDF direct lighting.
+* **Step 12: Direct PBR Shading (Forward+)**
+* **Goal:** Write the final Forward fragment shader. For each pixel, determine its screen-space tile, read the list of active light indices from the SSBO, and loop *only* over those lights to compute the glTF direct lighting.
 * **Verification:** Hundreds of dynamic lights rendering at high framerates with correct specular highlights, without performance tanking.
 
 
-* **Step 9: Integrating Baked Indirect SH**
-* **Goal:** Pass your baked 3rd-order SH coefficients into the shader. Evaluate the SH irradiance using your existing math and add it as the diffuse ambient term.
-* **Verification:** Soft, multi-directional indirect light blends seamlessly with the sharp, real-time direct specular highlights.
+
+### Phase 6: Dynamic Shadows
+
+* **Step 13: Light Importance Ranking**
+* **Goal:**  Frustum cull lights based on their bounding box. Rank lights by form factor (`flux/distance^2`).
+* **Verification:**  Log the ranking to console.
 
 
-
-### Phase 5: Dynamic Shadows
-
-* **Step 10: The Shadow Atlas**
-* **Goal:** Create a large depth texture array (or atlas) for your 8 most important dynamic lights. Render their shadow maps in a pass before the depth pre-pass.
-* **Verification:** Visualize the shadow atlas texture array on-screen to ensure the 8 depth maps are updating dynamically.
+* **Step 14: The Shadow Atlas**
+* **Goal:** Create a 2048x2048 depth texture atlas for important dynamic lights. Top 2 lights consume two 1024x1024 tiles each. The following 4 lights consume 512x512 tiles each. The remaining 16 lights consume 256x256 tiles each. Point lights don't cast shadow. Render their shadow maps in a pass before the depth pre-pass.
+* **Verification:** Visualize the shadow atlas texture array on-screen to ensure the 22 shadow maps are updating dynamically.
 
 
-* **Step 11: Final Shadow Application**
-* **Goal:** In the Step 8 Forward+ shader, sample the shadow atlas with Percentage-Closer Filtering (PCF) during the direct light evaluation.
+* **Step 15: Final Shadow Application**
+* **Goal:** In the Step 12 Forward+ shader, sample the shadow atlas with Percentage-Closer Filtering (PCF) during the direct light evaluation.
 * **Verification:** Smooth, dynamic shadows that correctly occlude both characters and the environment without double-shadowing artifacts.
