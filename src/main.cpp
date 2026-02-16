@@ -9,7 +9,7 @@ DEFINE_uint32(width, 1280, "Width of the window.");
 DEFINE_uint32(height, 720, "Height of the window.");
 
 void Run(const std::filesystem::path& scene_path) {
-  // TODO: Initialize window and start the main loop.
+  // TODO: Load scene, initialize window and start the main loop.
 }
 
 int main(int argc, char** argv) {
