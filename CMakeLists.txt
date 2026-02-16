@@ -69,12 +69,17 @@ set(LIB_SOURCES
     src/gl_common.cpp
     src/input.cpp
     src/interaction.cpp
-    src/implementations.cpp)
+    src/implementations.cpp
+    src/loader.cpp
+    src/scene.cpp)
 
 set(LIB_HEADERS
+    src/colorspace.h
     src/gl_common.h
     src/input.h
-    src/interaction.h)
+    src/interaction.h
+    src/loader.h
+    src/scene.h)
 
 add_library(sh_renderer SHARED ${LIB_SOURCES} ${LIB_HEADERS})
 target_include_directories(sh_renderer PUBLIC 
