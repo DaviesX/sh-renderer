@@ -1,4 +1,0 @@
-/home/davis/sh-renderer/build/CMakeFiles/sh_renderer.dir
-/home/davis/sh-renderer/build/CMakeFiles/test.dir
-/home/davis/sh-renderer/build/CMakeFiles/edit_cache.dir
-/home/davis/sh-renderer/build/CMakeFiles/rebuild_cache.dir
