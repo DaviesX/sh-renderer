@@ -10,50 +10,13 @@ namespace sh_renderer {
 namespace {
 
 // Simple Unlit Shader
-const char* kUnlitVertex = R"(
-#version 460 core
-
-layout(location = 0) in vec3 in_position;
-layout(location = 1) in vec3 in_normal;
-layout(location = 2) in vec2 in_uv;
-
-layout(location = 0) uniform mat4 u_view_proj;
-layout(location = 1) uniform mat4 u_model;
-
-out vec2 v_uv;
-out vec3 v_normal;
-
-void main() {
-    v_uv = in_uv;
-    v_normal = mat3(u_model) * in_normal; // Simplified normal transform
-    gl_Position = u_view_proj * u_model * vec4(in_position, 1.0);
-}
-)";
-
-const char* kUnlitFragment = R"(
-#version 460 core
-
-in vec2 v_uv;
-in vec3 v_normal;
-
-out vec4 out_color;
-
-layout(binding = 0) uniform sampler2D u_albedo;
-
-void main() {
-    vec4 color = texture(u_albedo, v_uv);
-    // Simple N dot L with "headlamp"
-    vec3 N = normalize(v_normal);
-    vec3 L = normalize(vec3(0.5, 1.0, 1.0)); // Fixed light for unlit viz
-    float ndotl = max(dot(N, L), 0.2);
-    out_color = vec4(color.rgb * ndotl, color.a);
-}
-)";
+const char* kUnlitVertex = "src/shaders/unlit.vert";
+const char* kUnlitFragment = "src/shaders/unlit.frag";
 
 }  // namespace
 
 ShaderProgram CreateUnlitProgram() {
-  auto program = ShaderProgram::CreateFromSource(kUnlitVertex, kUnlitFragment);
+  auto program = ShaderProgram::CreateGraphics(kUnlitVertex, kUnlitFragment);
   if (!program) {
     LOG(FATAL) << "Failed to create unlit shader program.";
     return {};

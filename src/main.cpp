@@ -95,9 +95,9 @@ void Run(const std::filesystem::path& scene_path) {
     DrawDepth(*scene, camera, depth_program, depth_target);
 
     // 2. Visualization (Overwrite screen)
-    DrawDepthVisualization(depth_target, camera, depth_vis_program);
+    // DrawDepthVisualization(depth_target, camera, depth_vis_program);
 
-    // DrawSceneUnlit(*scene, camera, unlit_program);
+    DrawSceneUnlit(*scene, camera, unlit_program);
 
     glfwSwapBuffers(*window);
   }

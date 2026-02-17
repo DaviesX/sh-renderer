@@ -3,6 +3,7 @@
 #include <Eigen/Dense>
 
 #include "camera.h"
+#include "render_target.h"
 #include "scene.h"
 #include "shader.h"
 
