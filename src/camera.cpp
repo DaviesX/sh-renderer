@@ -48,11 +48,6 @@ void LookAt(const Eigen::Vector3f& target, Camera* camera) {
   if (std::abs(forward.dot(world_up)) > 0.999f) {
     // If looking up or down, standard right calculation fails.
     // Choose arbitrary "up" to calculate right.
-    // If looking +Y, Forward=(0,1,0). Right? Let's say +X.
-    // If looking -Y, Forward=(0,-1,0). Right? +X.
-    // Let's use UnitZ as temporary up to compute Right.
-    // But standard LookAt usually preserves Right as +X when Looking Y?
-    // Let's force Right = +X.
     Eigen::Vector3f right = Eigen::Vector3f::UnitX();
     Eigen::Vector3f up = right.cross(forward).normalized();
     rotation_matrix.col(0) = right;
@@ -90,6 +85,16 @@ Eigen::Matrix4f GetProjectionMatrix(float fov_y_radians, float aspect_ratio,
   projection(3, 2) = -1.0f;
 
   return projection;
+}
+
+Eigen::Matrix4f GetProjectionMatrix(const Camera& camera) {
+  return GetProjectionMatrix(camera.intrinsics.fov_y_radians,
+                             camera.intrinsics.aspect_ratio,
+                             camera.intrinsics.z_near, camera.intrinsics.z_far);
+}
+
+Eigen::Matrix4f GetViewProjMatrix(const Camera& camera) {
+  return GetProjectionMatrix(camera) * GetViewMatrix(camera);
 }
 
 }  // namespace sh_renderer

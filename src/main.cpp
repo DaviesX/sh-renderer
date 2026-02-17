@@ -71,11 +71,9 @@ void Run(const std::filesystem::path& scene_path) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     float aspect = static_cast<float>(fb_width) / static_cast<float>(fb_height);
-    Eigen::Matrix4f view = GetViewMatrix(camera);
-    Eigen::Matrix4f proj =
-        GetProjectionMatrix(0.658f, aspect, 0.1f, 100.0f);  // 38 deg
+    camera.intrinsics.aspect_ratio = aspect;
 
-    DrawSceneUnlit(*scene, proj * view, unlit_program);
+    DrawSceneUnlit(*scene, camera, unlit_program);
 
     glfwSwapBuffers(*window);
   }

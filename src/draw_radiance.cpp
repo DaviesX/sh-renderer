@@ -61,18 +61,18 @@ ShaderProgram CreateUnlitProgram() {
   return std::move(*program);
 }
 
-void DrawSceneRadiance(const Scene& scene, const Eigen::Matrix4f& vp,
+void DrawSceneRadiance(const Scene& scene, const Camera& camera,
                        const ShaderProgram& program) {
   // TODO: Phase 3.
 }
 
 // Actual implementation of DrawSceneUnlit
-void DrawSceneUnlit(const Scene& scene, const Eigen::Matrix4f& vp,
+void DrawSceneUnlit(const Scene& scene, const Camera& camera,
                     const ShaderProgram& program) {
   if (!program) return;
 
   program.Use();
-  program.Uniform("u_view_proj", vp);
+  program.Uniform("u_view_proj", GetViewProjMatrix(camera));
 
   for (const auto& geo : scene.geometries) {
     if (geo.vao == 0) continue;
