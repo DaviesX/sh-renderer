@@ -43,8 +43,8 @@ GLuint GetQuadVAO() {
 }  // namespace
 
 ShaderProgram CreateDepthProgram() {
-  auto program = ShaderProgram::CreateGraphics("src/shaders/depth.vert",
-                                               "src/shaders/depth.frag");
+  auto program =
+      ShaderProgram::CreateGraphics("glsl/depth.vert", "glsl/depth.frag");
   if (!program) {
     LOG(ERROR) << "Failed to create depth shader program.";
     return {};
@@ -53,8 +53,8 @@ ShaderProgram CreateDepthProgram() {
 }
 
 ShaderProgram CreateDepthVisualizerProgram() {
-  auto program = ShaderProgram::CreateGraphics("src/shaders/fullscreen.vert",
-                                               "src/shaders/depth_vis.frag");
+  auto program = ShaderProgram::CreateGraphics("glsl/fullscreen.vert",
+                                               "glsl/depth_vis.frag");
   if (!program) {
     LOG(ERROR) << "Failed to create depth visualizer program.";
     return {};

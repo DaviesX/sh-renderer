@@ -10,8 +10,8 @@ namespace sh_renderer {
 namespace {
 
 // Simple Unlit Shader
-const char* kUnlitVertex = "src/shaders/unlit.vert";
-const char* kUnlitFragment = "src/shaders/unlit.frag";
+const char* kUnlitVertex = "glsl/unlit.vert";
+const char* kUnlitFragment = "glsl/unlit.frag";
 
 }  // namespace
 
