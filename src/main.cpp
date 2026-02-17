@@ -12,7 +12,7 @@
 DEFINE_string(input, "", "Path to the glTF scene file to render.");
 DEFINE_uint32(width, 1280, "Width of the window.");
 DEFINE_uint32(height, 720, "Height of the window.");
-DEFINE_uint32(msaa_samples, 4, "Number of MSAA samples.");
+DEFINE_uint32(msaa_samples, 0, "Number of MSAA samples.");
 
 namespace sh_renderer {
 

@@ -9,12 +9,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_compile_options(
   $<$<CONFIG:Release>:-O3>
   $<$<CONFIG:Release>:-march=native>
-  $<$<CONFIG:Debug>:-fsanitize=address>
+  # $<$<CONFIG:Debug>:-fsanitize=address>
   $<$<CONFIG:Debug>:-fno-omit-frame-pointer>
 )
 add_link_options(
   $<$<CONFIG:Release>:-O3>
-  $<$<CONFIG:Debug>:-fsanitize=address>
+  # $<$<CONFIG:Debug>:-fsanitize=address>
 )
 
 # Dependencies
@@ -23,7 +23,6 @@ find_package(glog REQUIRED)
 find_package(gflags REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(glfw3 REQUIRED)
-find_package(GLEW REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
@@ -69,6 +68,7 @@ target_include_directories(tinyexr INTERFACE ${TINYEXR_INCLUDE_DIR})
 set(LIB_SOURCES 
     src/camera.cpp
     src/gl_common.cpp
+    src/glad.c
     src/input.cpp
     src/interaction.cpp
     src/implementations.cpp
@@ -80,6 +80,7 @@ set(LIB_HEADERS
     src/camera.h
     src/colorspace.h
     src/gl_common.h
+    src/glad.h
     src/input.h
     src/interaction.h
     src/loader.h
@@ -95,7 +96,6 @@ target_link_libraries(sh_renderer PUBLIC
     gflags
     OpenGL::GL
     glfw
-    GLEW::GLEW
     Eigen3::Eigen
     tinygltf
     nlohmann_json

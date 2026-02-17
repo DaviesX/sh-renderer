@@ -60,6 +60,10 @@ void GLAPIENTRY DebugMessageCallback(GLenum source, GLenum type, GLuint id,
 std::optional<Window> CreateWindow(unsigned width, unsigned height,
                                    std::string_view title,
                                    unsigned msaa_samples) {
+  glfwSetErrorCallback([](int error, const char* description) {
+    LOG(ERROR) << "GLFW Error " << error << ": " << description;
+  });
+
   if (!glfwInit()) {
     LOG(ERROR) << "Failed to initialize GLFW.";
     return std::nullopt;
@@ -68,6 +72,7 @@ std::optional<Window> CreateWindow(unsigned width, unsigned height,
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+  glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_NATIVE_CONTEXT_API);
   glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE);
 
   if (msaa_samples > 0) {
@@ -87,11 +92,9 @@ std::optional<Window> CreateWindow(unsigned width, unsigned height,
 
   glfwMakeContextCurrent(window);
 
-  // Initialize GLEW for OpenGL function loading.
-  glewExperimental = GL_TRUE;
-  GLenum glew_err = glewInit();
-  if (glew_err != GLEW_OK) {
-    LOG(ERROR) << "Failed to initialize GLEW: " << glewGetErrorString(glew_err);
+  // Initialize GLAD for OpenGL function loading.
+  if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+    LOG(ERROR) << "Failed to initialize GLAD.";
     glfwDestroyWindow(window);
     glfwTerminate();
     return std::nullopt;
@@ -103,7 +106,7 @@ std::optional<Window> CreateWindow(unsigned width, unsigned height,
   // Enable debug output.
   glEnable(GL_DEBUG_OUTPUT);
   glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-  glDebugMessageCallback(DebugMessageCallback, nullptr);
+  // glDebugMessageCallback(DebugMessageCallback, nullptr);
 
   if (msaa_samples > 0) {
     glEnable(GL_MULTISAMPLE);
@@ -119,7 +122,6 @@ void DestroyWindow(Window window) {
   if (window) {
     glfwDestroyWindow(window);
   }
-  glfwTerminate();
 }
 
 }  // namespace sh_renderer
