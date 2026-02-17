@@ -53,14 +53,18 @@ void Run(const std::filesystem::path& scene_path) {
 
   while (!glfwWindowShouldClose(*window) && !should_close) {
     // Process all queued input events.
-    while (auto event = PollInputEvent(*window, &input_state)) {
-      HandleInputEvent(*event, &interaction_state, &camera, &should_close);
+    std::vector<InputEvent> events = PollInputEvents(*window, &input_state);
+    for (const auto& event : events) {
+      HandleInputEvent(event, &interaction_state, &camera, &should_close);
     }
 
     // Get the current framebuffer size for the viewport.
     int fb_width, fb_height;
     glfwGetFramebufferSize(*window, &fb_width, &fb_height);
     glViewport(0, 0, fb_width, fb_height);
+
+    // Enable depth testing.
+    glEnable(GL_DEPTH_TEST);
 
     // Clear to a dark teal color.
     glClearColor(0.05f, 0.08f, 0.10f, 1.0f);
@@ -69,7 +73,7 @@ void Run(const std::filesystem::path& scene_path) {
     float aspect = static_cast<float>(fb_width) / static_cast<float>(fb_height);
     Eigen::Matrix4f view = GetViewMatrix(camera);
     Eigen::Matrix4f proj =
-        GetProjectionMatrix(1.0472f, aspect, 0.1f, 100.0f);  // 60 deg
+        GetProjectionMatrix(0.658f, aspect, 0.1f, 100.0f);  // 38 deg
 
     DrawSceneUnlit(*scene, proj * view, unlit_program);
 

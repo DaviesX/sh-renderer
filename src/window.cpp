@@ -113,7 +113,7 @@ std::optional<Window> CreateWindow(unsigned width, unsigned height,
   }
 
   // Disable VSync by default for uncapped framerate profiling.
-  glfwSwapInterval(0);
+  glfwSwapInterval(1);
 
   return window;
 }

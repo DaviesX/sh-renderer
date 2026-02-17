@@ -127,5 +127,22 @@ TEST(InputTest, MultipleEventsQueueInOrder) {
   EXPECT_NE(std::get_if<KeyReleaseEvent>(&state.event_queue[2]), nullptr);
 }
 
+TEST(InputTest, PressedKeysTracking) {
+  InputState state;
+  input_internal::ProcessKeyEvent(GLFW_KEY_W, GLFW_PRESS, &state);
+  EXPECT_TRUE(state.pressed_keys.count('W'));
+
+  input_internal::ProcessKeyEvent(GLFW_KEY_A, GLFW_PRESS, &state);
+  EXPECT_TRUE(state.pressed_keys.count('W'));
+  EXPECT_TRUE(state.pressed_keys.count('A'));
+
+  input_internal::ProcessKeyEvent(GLFW_KEY_W, GLFW_RELEASE, &state);
+  EXPECT_FALSE(state.pressed_keys.count('W'));
+  EXPECT_TRUE(state.pressed_keys.count('A'));
+
+  input_internal::ProcessKeyEvent(GLFW_KEY_A, GLFW_RELEASE, &state);
+  EXPECT_FALSE(state.pressed_keys.count('A'));
+}
+
 }  // namespace
 }  // namespace sh_renderer
