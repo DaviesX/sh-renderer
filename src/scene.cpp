@@ -4,7 +4,7 @@
 
 #include <Eigen/Core>
 
-namespace sh_baker {
+namespace sh_renderer {
 
 std::vector<Eigen::Vector3f> TransformedVertices(const Geometry& geometry) {
   std::vector<Eigen::Vector3f> vertices;
@@ -54,4 +54,4 @@ float SurfaceArea(const Geometry& geometry) {
   return total_area;
 }
 
-}  // namespace sh_baker
+}  // namespace sh_renderer

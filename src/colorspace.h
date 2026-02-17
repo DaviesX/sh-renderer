@@ -1,11 +1,9 @@
-#ifndef SH_BAKER_SRC_COLORSPACE_H
-#define SH_BAKER_SRC_COLORSPACE_H
+#pragma once
 
-#include <algorithm>
 #include <cmath>
 #include <cstdint>
 
-namespace sh_baker {
+namespace sh_renderer {
 
 inline float SRGBToLinear(uint8_t x) {
   float v = x / 255.0f;
@@ -24,6 +22,4 @@ inline float Luminance(float r, float g, float b) {
   return 0.2126f * r + 0.7152f * g + 0.0722f * b;
 }
 
-}  // namespace sh_baker
-
-#endif  // SH_BAKER_SRC_COLORSPACE_H
+}  // namespace sh_renderer

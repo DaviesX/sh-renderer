@@ -67,6 +67,7 @@ target_include_directories(tinyexr INTERFACE ${TINYEXR_INCLUDE_DIR})
 # Renderer library
 set(LIB_SOURCES 
     src/camera.cpp
+    src/draw_radiance.cpp
     src/gl_common.cpp
     src/glad.c
     src/input.cpp
@@ -79,6 +80,7 @@ set(LIB_SOURCES
 set(LIB_HEADERS
     src/camera.h
     src/colorspace.h
+    src/draw_radiance.h
     src/gl_common.h
     src/glad.h
     src/input.h

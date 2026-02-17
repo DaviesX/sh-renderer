@@ -1,5 +1,4 @@
-#ifndef SH_BAKER_SRC_SCENE_H_
-#define SH_BAKER_SRC_SCENE_H_
+#pragma once
 
 #include <embree4/rtcore.h>
 
@@ -10,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace sh_baker {
+namespace sh_renderer {
 
 // --- Texture ---
 struct Texture {
@@ -22,6 +21,8 @@ struct Texture {
   uint32_t height = 0;
   uint32_t channels = 0;
   std::vector<uint8_t> pixel_data;
+
+  // TODO: Add GL resource handle as needed.
 };
 
 // --- Texture32F ---
@@ -34,6 +35,9 @@ struct Texture32F {
   uint32_t height = 0;
   uint32_t channels = 0;
   std::vector<float> pixel_data;
+
+  // TODO: Add GL resource handle as needed. The underlying texture may be
+  // 16-bit.
 };
 
 // --- Texture32I ---
@@ -42,6 +46,8 @@ struct Texture32I {
   uint32_t height = 0;
   uint32_t channels = 0;
   std::vector<int32_t> pixel_data;
+
+  // TODO: Add GL resource handle as needed.
 };
 
 // --- Material ---
@@ -71,6 +77,8 @@ struct Geometry {
 
   int material_id = -1;  // Index into Scene::materials
   Eigen::Affine3f transform = Eigen::Affine3f::Identity();
+
+  // TODO: Add GL resource handles as needed.
 };
 
 // --- Light ---
@@ -92,6 +100,8 @@ struct Light {
   // float flux = 0.0f;
   const Material* material = nullptr;
   const Geometry* geometry = nullptr;
+
+  // TODO: Add GL resource handles as needed.
 };
 
 // --- Scene ---
@@ -109,6 +119,4 @@ std::vector<Eigen::Vector4f> TransformedTangents(const Geometry& geometry);
 // Returns the surface area of the geometry.
 float SurfaceArea(const Geometry& geometry);
 
-}  // namespace sh_baker
-
-#endif  // SH_BAKER_SRC_SCENE_H_
+}  // namespace sh_renderer

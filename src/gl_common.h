@@ -6,6 +6,8 @@ namespace sh_renderer {
 // CreatePipelineShaders(compute, vertex, fragment).
 // CreateScreenQuadVao().
 // CreateTexture().
+// BeginFrame()
+// EndFrame()
 // Add as needed.
 
 }  // namespace sh_renderer
