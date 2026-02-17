@@ -5,9 +5,17 @@
 
 namespace sh_renderer {
 
+struct CameraIntrinsics {
+  float fov_y_radians = 0.658f;
+  float aspect_ratio = 1.777f;
+  float z_near = 0.1f;
+  float z_far = 100.0f;
+};
+
 struct Camera {
   Eigen::Vector3f position;
   Eigen::Quaternionf orientation;
+  CameraIntrinsics intrinsics;
 };
 
 /*
@@ -57,5 +65,33 @@ void LookAt(const Eigen::Vector3f& target, Camera* camera);
  * @return The view matrix.
  */
 Eigen::Matrix4f GetViewMatrix(const Camera& camera);
+
+/*
+ * @brief Computes the perspective projection matrix.
+ *
+ * @param fov_y_radians The vertical field of view in radians.
+ * @param aspect_ratio The aspect ratio (width / height).
+ * @param z_near The distance to the near clipping plane.
+ * @param z_far The distance to the far clipping plane.
+ * @return The 4x4 projection matrix.
+ */
+Eigen::Matrix4f GetProjectionMatrix(float fov_y_radians, float aspect_ratio,
+                                    float z_near, float z_far);
+
+/*
+ * @brief Computes the projection matrix from camera intrinsics.
+ *
+ * @param camera The camera containing intrinsic parameters.
+ * @return The 4x4 projection matrix.
+ */
+Eigen::Matrix4f GetProjectionMatrix(const Camera& camera);
+
+/*
+ * @brief Computes the combined view-projection matrix.
+ *
+ * @param camera The camera.
+ * @return The 4x4 view-projection matrix.
+ */
+Eigen::Matrix4f GetViewProjMatrix(const Camera& camera);
 
 }  // namespace sh_renderer

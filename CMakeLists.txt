@@ -67,24 +67,30 @@ target_include_directories(tinyexr INTERFACE ${TINYEXR_INCLUDE_DIR})
 # Renderer library
 set(LIB_SOURCES 
     src/camera.cpp
-    src/gl_common.cpp
+    src/draw_depth.cpp
+    src/draw_radiance.cpp
     src/glad.c
     src/input.cpp
     src/interaction.cpp
     src/implementations.cpp
     src/loader.cpp
+    src/render_target.cpp
     src/scene.cpp
+    src/shader.cpp
     src/window.cpp)
 
 set(LIB_HEADERS
     src/camera.h
     src/colorspace.h
-    src/gl_common.h
+    src/draw_depth.h
+    src/draw_radiance.h
     src/glad.h
     src/input.h
     src/interaction.h
     src/loader.h
+    src/render_target.h
     src/scene.h
+    src/shader.h
     src/window.h)
 
 add_library(sh_renderer SHARED ${LIB_SOURCES} ${LIB_HEADERS})
@@ -119,7 +125,6 @@ enable_testing()
 
 add_executable(sh_renderer_test
     src/camera_test.cpp
-    src/gl_common_test.cpp
     src/input_test.cpp
     src/interaction_test.cpp
     src/window_test.cpp

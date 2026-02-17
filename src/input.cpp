@@ -2,8 +2,6 @@
 
 #include <glog/logging.h>
 
-#include <optional>
-
 namespace sh_renderer {
 
 namespace input_internal {
@@ -44,8 +42,10 @@ void ProcessKeyEvent(int key, int action, InputState* state) {
   if (mapped == '\0') return;
 
   if (action == GLFW_PRESS) {
+    state->pressed_keys.insert(mapped);
     state->event_queue.push_back(InputEvent{KeyPressEvent{mapped}});
   } else if (action == GLFW_RELEASE) {
+    state->pressed_keys.erase(mapped);
     state->event_queue.push_back(InputEvent{KeyReleaseEvent{mapped}});
   }
 }
@@ -102,7 +102,7 @@ void ScrollCallback(Window window, double /*xoffset*/, double yoffset) {
 
 }  // namespace input_internal
 
-std::optional<InputEvent> PollInputEvent(Window window, InputState* state) {
+std::vector<InputEvent> PollInputEvents(Window window, InputState* state) {
   if (!state->registered_callbacks) {
     glfwSetWindowUserPointer(window, state);
     glfwSetKeyCallback(window, input_internal::KeyCallback);
@@ -120,13 +120,30 @@ std::optional<InputEvent> PollInputEvent(Window window, InputState* state) {
 
   glfwPollEvents();
 
-  if (state->event_queue.empty()) {
-    return std::nullopt;
+  std::vector<InputEvent> events;
+  std::unordered_set<char> just_pressed;
+
+  // 1. Collect all events from callbacks (buffered in the queue).
+  while (!state->event_queue.empty()) {
+    const auto& event = state->event_queue.front();
+    events.push_back(event);
+
+    // Track keys that were physically pressed this frame to avoid duplicates.
+    if (auto* press = std::get_if<KeyPressEvent>(&event)) {
+      just_pressed.insert(press->key);
+    }
+
+    state->event_queue.pop_front();
   }
 
-  InputEvent event = state->event_queue.front();
-  state->event_queue.pop_front();
-  return event;
+  // 2. Generate events for held keys, skipping any that were just pressed.
+  for (char key : state->pressed_keys) {
+    if (just_pressed.find(key) == just_pressed.end()) {
+      events.push_back(InputEvent{KeyPressEvent{key}});
+    }
+  }
+
+  return events;
 }
 
 }  // namespace sh_renderer

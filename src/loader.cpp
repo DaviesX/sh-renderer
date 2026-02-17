@@ -12,7 +12,7 @@
 #include "scene.h"
 #include "tiny_gltf.h"
 
-namespace sh_baker {
+namespace sh_renderer {
 namespace {
 
 const float kLightIntensityScale = 1 / 200.f;
@@ -678,4 +678,4 @@ std::optional<Scene> LoadScene(const std::filesystem::path& gltf_file) {
   return scene;
 }
 
-}  // namespace sh_baker
+}  // namespace sh_renderer
