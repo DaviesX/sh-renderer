@@ -4,10 +4,12 @@
 #include <filesystem>
 #include <string>
 
+#include "draw_depth.h"
 #include "draw_radiance.h"
 #include "input.h"
 #include "interaction.h"
 #include "loader.h"
+#include "render_target.h"
 #include "scene.h"
 #include "window.h"
 
@@ -42,10 +44,18 @@ void Run(const std::filesystem::path& scene_path) {
   UploadSceneToGPU(*scene);
 
   ShaderProgram unlit_program = CreateUnlitProgram();
-  if (!unlit_program) {
-    LOG(ERROR) << "Failed to create unlit program.";
+  ShaderProgram depth_program = CreateDepthProgram();
+  ShaderProgram depth_vis_program = CreateDepthVisualizerProgram();
+
+  if (!unlit_program || !depth_program || !depth_vis_program) {
+    LOG(ERROR) << "Failed to create shader programs.";
     return;
   }
+
+  // Initial depth target
+  int initial_width, initial_height;
+  glfwGetFramebufferSize(*window, &initial_width, &initial_height);
+  RenderTarget depth_target = CreateDepthTarget(initial_width, initial_height);
 
   InputState input_state;
   InteractionState interaction_state;
@@ -61,6 +71,14 @@ void Run(const std::filesystem::path& scene_path) {
     // Get the current framebuffer size for the viewport.
     int fb_width, fb_height;
     glfwGetFramebufferSize(*window, &fb_width, &fb_height);
+
+    // Resize depth target if needed
+    if (fb_width != depth_target.width || fb_height != depth_target.height) {
+      glDeleteFramebuffers(1, &depth_target.fbo);
+      glDeleteTextures(1, &depth_target.depth_buffer);
+      depth_target = CreateDepthTarget(fb_width, fb_height);
+    }
+
     glViewport(0, 0, fb_width, fb_height);
 
     // Enable depth testing.
@@ -73,12 +91,22 @@ void Run(const std::filesystem::path& scene_path) {
     float aspect = static_cast<float>(fb_width) / static_cast<float>(fb_height);
     camera.intrinsics.aspect_ratio = aspect;
 
-    DrawSceneUnlit(*scene, camera, unlit_program);
+    // 1. Depth Pre-pass
+    DrawDepth(*scene, camera, depth_program, depth_target);
+
+    // 2. Visualization (Overwrite screen)
+    DrawDepthVisualization(depth_target, camera, depth_vis_program);
+
+    // DrawSceneUnlit(*scene, camera, unlit_program);
 
     glfwSwapBuffers(*window);
   }
 
   DestroyWindow(*window);
+
+  // Cleanup
+  glDeleteFramebuffers(1, &depth_target.fbo);
+  glDeleteTextures(1, &depth_target.depth_buffer);
 }
 
 }  // namespace sh_renderer
