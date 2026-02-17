@@ -9,12 +9,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_compile_options(
   $<$<CONFIG:Release>:-O3>
   $<$<CONFIG:Release>:-march=native>
-  $<$<CONFIG:Debug>:-fsanitize=address>
+  # $<$<CONFIG:Debug>:-fsanitize=address>
   $<$<CONFIG:Debug>:-fno-omit-frame-pointer>
 )
 add_link_options(
   $<$<CONFIG:Release>:-O3>
-  $<$<CONFIG:Debug>:-fsanitize=address>
+  # $<$<CONFIG:Debug>:-fsanitize=address>
 )
 
 # Dependencies
@@ -66,20 +66,26 @@ target_include_directories(tinyexr INTERFACE ${TINYEXR_INCLUDE_DIR})
 
 # Renderer library
 set(LIB_SOURCES 
+    src/camera.cpp
     src/gl_common.cpp
+    src/glad.c
     src/input.cpp
     src/interaction.cpp
     src/implementations.cpp
     src/loader.cpp
-    src/scene.cpp)
+    src/scene.cpp
+    src/window.cpp)
 
 set(LIB_HEADERS
+    src/camera.h
     src/colorspace.h
     src/gl_common.h
+    src/glad.h
     src/input.h
     src/interaction.h
     src/loader.h
-    src/scene.h)
+    src/scene.h
+    src/window.h)
 
 add_library(sh_renderer SHARED ${LIB_SOURCES} ${LIB_HEADERS})
 target_include_directories(sh_renderer PUBLIC 
@@ -112,6 +118,7 @@ target_link_libraries(sh_renderer_main PRIVATE
 enable_testing()
 
 add_executable(sh_renderer_test
+    src/camera_test.cpp
     src/gl_common_test.cpp
     src/input_test.cpp
     src/interaction_test.cpp
