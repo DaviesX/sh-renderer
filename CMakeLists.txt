@@ -69,6 +69,7 @@ set(LIB_SOURCES
     src/camera.cpp
     src/draw_depth.cpp
     src/draw_radiance.cpp
+    src/draw_tonemap.cpp
     src/glad.c
     src/input.cpp
     src/interaction.cpp
