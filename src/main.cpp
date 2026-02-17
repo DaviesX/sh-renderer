@@ -4,9 +4,11 @@
 #include <filesystem>
 #include <string>
 
-#include "camera.h"
+#include "draw_radiance.h"
 #include "input.h"
 #include "interaction.h"
+#include "loader.h"
+#include "scene.h"
 #include "window.h"
 
 DEFINE_string(input, "", "Path to the glTF scene file to render.");
@@ -31,6 +33,20 @@ void Run(const std::filesystem::path& scene_path) {
       .orientation = Eigen::Quaternionf::Identity(),
   };
 
+  std::optional<Scene> scene = LoadScene(scene_path);
+  if (!scene) {
+    LOG(ERROR) << "Failed to load scene: " << scene_path;
+    return;
+  }
+
+  UploadSceneToGPU(*scene);
+
+  ShaderProgram unlit_program = CreateUnlitProgram();
+  if (!unlit_program) {
+    LOG(ERROR) << "Failed to create unlit program.";
+    return;
+  }
+
   InputState input_state;
   InteractionState interaction_state;
   bool should_close = false;
@@ -50,7 +66,12 @@ void Run(const std::filesystem::path& scene_path) {
     glClearColor(0.05f, 0.08f, 0.10f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // TODO: Scene rendering goes here.
+    float aspect = static_cast<float>(fb_width) / static_cast<float>(fb_height);
+    Eigen::Matrix4f view = GetViewMatrix(camera);
+    Eigen::Matrix4f proj =
+        GetProjectionMatrix(1.0472f, aspect, 0.1f, 100.0f);  // 60 deg
+
+    DrawSceneUnlit(*scene, proj * view, unlit_program);
 
     glfwSwapBuffers(*window);
   }

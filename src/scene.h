@@ -22,7 +22,8 @@ struct Texture {
   uint32_t channels = 0;
   std::vector<uint8_t> pixel_data;
 
-  // TODO: Add GL resource handle as needed.
+  // GL Resource
+  uint32_t texture_id = 0;
 };
 
 // --- Texture32F ---
@@ -36,8 +37,8 @@ struct Texture32F {
   uint32_t channels = 0;
   std::vector<float> pixel_data;
 
-  // TODO: Add GL resource handle as needed. The underlying texture may be
-  // 16-bit.
+  // GL Resource. The underlying texture may be 16-bit.
+  uint32_t texture_id = 0;
 };
 
 // --- Texture32I ---
@@ -47,7 +48,8 @@ struct Texture32I {
   uint32_t channels = 0;
   std::vector<int32_t> pixel_data;
 
-  // TODO: Add GL resource handle as needed.
+  // GL Resource
+  uint32_t texture_id = 0;
 };
 
 // --- Material ---
@@ -78,7 +80,11 @@ struct Geometry {
   int material_id = -1;  // Index into Scene::materials
   Eigen::Affine3f transform = Eigen::Affine3f::Identity();
 
-  // TODO: Add GL resource handles as needed.
+  // GL Resources
+  uint32_t vao = 0;
+  uint32_t vbo = 0;
+  uint32_t ebo = 0;
+  uint32_t index_count = 0;
 };
 
 // --- Light ---
@@ -101,7 +107,9 @@ struct Light {
   const Material* material = nullptr;
   const Geometry* geometry = nullptr;
 
-  // TODO: Add GL resource handles as needed.
+  // GL Resources
+  // Shadow map atlas tile indices / handles could go here later.
+  int shadow_map_layer = -1;
 };
 
 // --- Scene ---
@@ -110,6 +118,11 @@ struct Scene {
   std::vector<Material> materials;
   std::vector<Light> lights;
 };
+
+// Uploads the scene geometry and textures to the GPU.
+// Populates the GL resource handles in the scene structs.
+// Uses Direct State Access (DSA) for all GL operations.
+void UploadSceneToGPU(Scene& scene);
 
 // Transforms the geometry by the transform matrix.
 std::vector<Eigen::Vector3f> TransformedVertices(const Geometry& geometry);

@@ -2,56 +2,246 @@
 
 #include <glog/logging.h>
 
-#include <Eigen/Core>
+#include <algorithm>
+#include <numeric>
+
+#include "glad.h"
 
 namespace sh_renderer {
 
-std::vector<Eigen::Vector3f> TransformedVertices(const Geometry& geometry) {
-  std::vector<Eigen::Vector3f> vertices;
-  vertices.reserve(geometry.vertices.size());
-  for (const auto& v : geometry.vertices) {
-    vertices.push_back(geometry.transform * v);
+namespace {
+
+GLuint CreateTexture2D(const Texture& texture, bool srgb = true) {
+  if (texture.width == 0 || texture.height == 0) return 0;
+
+  GLuint tex;
+  glCreateTextures(GL_TEXTURE_2D, 1, &tex);
+
+  // Determine number of levels
+  GLsizei levels = 1;
+  // TODO: Generate mipmaps? For now just 1 level.
+  // levels = 1 + floor(log2(max(width, height)));
+
+  GLenum internal_format = GL_RGBA8;
+  if (texture.channels == 3) {
+    internal_format = srgb ? GL_SRGB8 : GL_RGB8;
+  } else if (texture.channels == 4) {
+    internal_format = srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8;
+  } else if (texture.channels == 1) {
+    internal_format = GL_R8;
   }
-  return vertices;
+
+  glTextureStorage2D(tex, levels, internal_format, texture.width,
+                     texture.height);
+
+  GLenum format = GL_RGBA;
+  if (texture.channels == 3)
+    format = GL_RGB;
+  else if (texture.channels == 1)
+    format = GL_RED;
+
+  if (!texture.pixel_data.empty()) {
+    glTextureSubImage2D(tex, 0, 0, 0, texture.width, texture.height, format,
+                        GL_UNSIGNED_BYTE, texture.pixel_data.data());
+  }
+
+  // Set parameters
+  glTextureParameteri(tex, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTextureParameteri(tex, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  glTextureParameteri(tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTextureParameteri(tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+  return tex;
+}
+
+void UploadGeometry(Geometry& geo) {
+  if (geo.vertices.empty()) return;
+
+  // Create VAO
+  glCreateVertexArrays(1, &geo.vao);
+
+  // Create VBO
+  // Interleave data? Or separate buffers?
+  // Let's use a single struct for vertex data usually, but here we have SOA in
+  // struct Geometry. Let's start with separate buffers or interleave them
+  // manually. Actually, standard is to use separate bindings or one large
+  // buffer. Let's pack them into a single buffer for cache locality (AOS).
+  // Format: Position (3f), Normal (3f), UV (2f), LightmapUV (2f), Tangent (4f)
+  // stride = 12 + 12 + 8 + 8 + 16 = 56 bytes.
+
+  struct Vertex {
+    float pos[3];
+    float norm[3];
+    float uv[2];
+    float luv[2];
+    float tan[4];
+  };
+
+  std::vector<Vertex> vertices;
+  vertices.reserve(geo.vertices.size());
+  bool has_lightmap = !geo.lightmap_uvs.empty();
+
+  for (size_t i = 0; i < geo.vertices.size(); ++i) {
+    Vertex v;
+    v.pos[0] = geo.vertices[i].x();
+    v.pos[1] = geo.vertices[i].y();
+    v.pos[2] = geo.vertices[i].z();
+
+    if (i < geo.normals.size()) {
+      v.norm[0] = geo.normals[i].x();
+      v.norm[1] = geo.normals[i].y();
+      v.norm[2] = geo.normals[i].z();
+    } else {
+      v.norm[0] = 0;
+      v.norm[1] = 1;
+      v.norm[2] = 0;
+    }
+
+    if (i < geo.texture_uvs.size()) {
+      v.uv[0] = geo.texture_uvs[i].x();
+      v.uv[1] = geo.texture_uvs[i].y();
+    } else {
+      v.uv[0] = 0;
+      v.uv[1] = 0;
+    }
+
+    if (has_lightmap && i < geo.lightmap_uvs.size()) {
+      v.luv[0] = geo.lightmap_uvs[i].x();
+      v.luv[1] = geo.lightmap_uvs[i].y();
+    } else {
+      v.luv[0] = 0;
+      v.luv[1] = 0;
+    }
+
+    if (i < geo.tangents.size()) {
+      v.tan[0] = geo.tangents[i].x();
+      v.tan[1] = geo.tangents[i].y();
+      v.tan[2] = geo.tangents[i].z();
+      v.tan[3] = geo.tangents[i].w();
+    } else {
+      v.tan[0] = 1;
+      v.tan[1] = 0;
+      v.tan[2] = 0;
+      v.tan[3] = 1;
+    }
+    vertices.push_back(v);
+  }
+
+  glCreateBuffers(1, &geo.vbo);
+  glNamedBufferStorage(geo.vbo, vertices.size() * sizeof(Vertex),
+                       vertices.data(), 0);
+
+  // EBO
+  if (!geo.indices.empty()) {
+    glCreateBuffers(1, &geo.ebo);
+    glNamedBufferStorage(geo.ebo, geo.indices.size() * sizeof(uint32_t),
+                         geo.indices.data(), 0);
+    glVertexArrayElementBuffer(geo.vao, geo.ebo);
+    geo.index_count = static_cast<uint32_t>(geo.indices.size());
+  } else {
+    geo.index_count = 0;
+  }
+
+  // Bindings
+  const GLuint binding_index = 0;
+  glVertexArrayVertexBuffer(geo.vao, binding_index, geo.vbo, 0, sizeof(Vertex));
+
+  // Attributes
+  // 0: Pos
+  glEnableVertexArrayAttrib(geo.vao, 0);
+  glVertexArrayAttribFormat(geo.vao, 0, 3, GL_FLOAT, GL_FALSE,
+                            offsetof(Vertex, pos));
+  glVertexArrayAttribBinding(geo.vao, 0, binding_index);
+
+  // 1: Normal
+  glEnableVertexArrayAttrib(geo.vao, 1);
+  glVertexArrayAttribFormat(geo.vao, 1, 3, GL_FLOAT, GL_FALSE,
+                            offsetof(Vertex, norm));
+  glVertexArrayAttribBinding(geo.vao, 1, binding_index);
+
+  // 2: UV
+  glEnableVertexArrayAttrib(geo.vao, 2);
+  glVertexArrayAttribFormat(geo.vao, 2, 2, GL_FLOAT, GL_FALSE,
+                            offsetof(Vertex, uv));
+  glVertexArrayAttribBinding(geo.vao, 2, binding_index);
+
+  // 3: Lightmap UV
+  glEnableVertexArrayAttrib(geo.vao, 3);
+  glVertexArrayAttribFormat(geo.vao, 3, 2, GL_FLOAT, GL_FALSE,
+                            offsetof(Vertex, luv));
+  glVertexArrayAttribBinding(geo.vao, 3, binding_index);
+
+  // 4: Tangent
+  glEnableVertexArrayAttrib(geo.vao, 4);
+  glVertexArrayAttribFormat(geo.vao, 4, 4, GL_FLOAT, GL_FALSE,
+                            offsetof(Vertex, tan));
+  glVertexArrayAttribBinding(geo.vao, 4, binding_index);
+}
+
+}  // namespace
+
+void UploadSceneToGPU(Scene& scene) {
+  // Upload Materials (Textures)
+  for (auto& mat : scene.materials) {
+    if (mat.albedo.texture_id == 0) {
+      mat.albedo.texture_id = CreateTexture2D(mat.albedo, true);
+    }
+    // Normal, Roughness...
+    // For Unlit, we mostly care about Albedo for now or just geometry.
+    // Let's upload others if needed.
+  }
+
+  // Upload Geometry
+  for (auto& geo : scene.geometries) {
+    UploadGeometry(geo);
+  }
+}
+
+// ... Existing functions ...
+std::vector<Eigen::Vector3f> TransformedVertices(const Geometry& geometry) {
+  std::vector<Eigen::Vector3f> out;
+  out.reserve(geometry.vertices.size());
+  for (const auto& v : geometry.vertices) {
+    out.push_back(geometry.transform * v);
+  }
+  return out;
 }
 
 std::vector<Eigen::Vector3f> TransformedNormals(const Geometry& geometry) {
-  std::vector<Eigen::Vector3f> normals;
-  normals.reserve(geometry.normals.size());
+  std::vector<Eigen::Vector3f> out;
+  out.reserve(geometry.normals.size());
+  Eigen::Matrix3f normal_mat =
+      geometry.transform.linear().inverse().transpose();
   for (const auto& n : geometry.normals) {
-    normals.push_back((geometry.transform.rotation() * n).normalized());
+    out.push_back((normal_mat * n).normalized());
   }
-  return normals;
+  return out;
 }
 
 std::vector<Eigen::Vector4f> TransformedTangents(const Geometry& geometry) {
-  std::vector<Eigen::Vector4f> tangents;
-  tangents.reserve(geometry.tangents.size());
-  for (const auto& t : geometry.tangents) {
-    Eigen::Vector3f tangent_vector = t.head<3>();
-    float tangent_sign = t.w();
-    Eigen::Vector3f transformed_tangent_vector =
-        geometry.transform.rotation() * tangent_vector;
-
-    Eigen::Vector4f transformed_tangent;
-    transformed_tangent.head<3>() = transformed_tangent_vector.normalized();
-    transformed_tangent.w() = tangent_sign;
-    tangents.push_back(transformed_tangent);
-  }
-  return tangents;
+  return geometry.tangents;  // Placeholder, assuming rigid transform handling
+                             // elsewhere or not needed on CPU
 }
 
 float SurfaceArea(const Geometry& geometry) {
-  const auto& vertices = TransformedVertices(geometry);
-  float total_area = 0.0f;
+  // Basic implementation for area lights
+  // Only works if indexed triangles
+  float area = 0.0f;
   for (size_t i = 0; i < geometry.indices.size(); i += 3) {
-    Eigen::Vector3f v0 = vertices[geometry.indices[i]];
-    Eigen::Vector3f v1 = vertices[geometry.indices[i + 1]];
-    Eigen::Vector3f v2 = vertices[geometry.indices[i + 2]];
-    float tri_area = 0.5f * (v1 - v0).cross(v2 - v0).norm();
-    total_area += tri_area;
+    const auto& v0 = geometry.vertices[geometry.indices[i]];
+    const auto& v1 = geometry.vertices[geometry.indices[i + 1]];
+    const auto& v2 = geometry.vertices[geometry.indices[i + 2]];
+
+    // Transform? The function signature implies local space, but usually we
+    // want world area. Let's assume input geometry is local, so we apply
+    // transform.
+    auto p0 = geometry.transform * v0;
+    auto p1 = geometry.transform * v1;
+    auto p2 = geometry.transform * v2;
+
+    area += 0.5f * (p1 - p0).cross(p2 - p0).norm();
   }
-  return total_area;
+  return area;
 }
 
 }  // namespace sh_renderer

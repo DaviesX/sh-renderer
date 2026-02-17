@@ -58,4 +58,16 @@ void LookAt(const Eigen::Vector3f& target, Camera* camera);
  */
 Eigen::Matrix4f GetViewMatrix(const Camera& camera);
 
+/*
+ * @brief Computes the perspective projection matrix.
+ *
+ * @param fov_y_radians The vertical field of view in radians.
+ * @param aspect_ratio The aspect ratio (width / height).
+ * @param z_near The distance to the near clipping plane.
+ * @param z_far The distance to the far clipping plane.
+ * @return The 4x4 projection matrix.
+ */
+Eigen::Matrix4f GetProjectionMatrix(float fov_y_radians, float aspect_ratio,
+                                    float z_near, float z_far);
+
 }  // namespace sh_renderer
