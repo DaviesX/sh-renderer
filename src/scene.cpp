@@ -258,4 +258,13 @@ float SurfaceArea(const Geometry& geometry) {
   return area;
 }
 
+std::optional<Light> FindSunLight(const Scene& scene) {
+  for (const auto& light : scene.lights) {
+    if (light.type == Light::Type::Directional) {
+      return light;
+    }
+  }
+  return std::nullopt;
+}
+
 }  // namespace sh_renderer

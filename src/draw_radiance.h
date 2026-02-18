@@ -3,25 +3,27 @@
 #include <Eigen/Dense>
 
 #include "camera.h"
+#include "cascade.h"
 #include "render_target.h"
 #include "scene.h"
 #include "shader.h"
 
 namespace sh_renderer {
 
-// Creates a simple unlit shader program.
+// Creates an unlit shader program.
 ShaderProgram CreateUnlitProgram();
 
-// Draws the scene with a simple unlit shader.
+// Draws the scene with an unlit shader.
 void DrawSceneUnlit(const Scene& scene, const Camera& camera,
                     const ShaderProgram& program);
 
-// TODO: Phase 3
+// Creates a radiance shader program (forward shading).
 ShaderProgram CreateRadianceProgram();
 
-// TODO: Phase 3
-// TODO: Phase 3
+// Draws the scene with a radiance shader (forward shading).
 void DrawSceneRadiance(const Scene& scene, const Camera& camera,
+                       const std::vector<RenderTarget>& sun_shadow_maps,
+                       const std::vector<Cascade>& sun_cascades,
                        const ShaderProgram& program,
                        const RenderTarget& hdr_target);
 

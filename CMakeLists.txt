@@ -67,8 +67,10 @@ target_include_directories(tinyexr INTERFACE ${TINYEXR_INCLUDE_DIR})
 # Renderer library
 set(LIB_SOURCES 
     src/camera.cpp
+    src/cascade.cpp
     src/draw_depth.cpp
     src/draw_radiance.cpp
+    src/draw_shadow_map.cpp
     src/draw_tonemap.cpp
     src/glad.c
     src/input.cpp
@@ -82,9 +84,11 @@ set(LIB_SOURCES
 
 set(LIB_HEADERS
     src/camera.h
+    src/cascade.h
     src/colorspace.h
     src/draw_depth.h
     src/draw_radiance.h
+    src/draw_shadow_map.h
     src/glad.h
     src/input.h
     src/interaction.h
@@ -126,6 +130,7 @@ enable_testing()
 
 add_executable(sh_renderer_test
     src/camera_test.cpp
+    src/cascade_test.cpp
     src/input_test.cpp
     src/interaction_test.cpp
     src/window_test.cpp

@@ -9,6 +9,7 @@ in vec4 v_tangent;
 
 // Camera
 uniform vec3 u_camera_pos;
+uniform mat4 u_view;  // Needed for cascade selection
 
 // Sun Light
 struct Light {
@@ -17,6 +18,12 @@ struct Light {
   float intensity;
 };
 uniform Light u_sun;
+
+// Shadows
+#define NUM_CASCADES 3
+layout(binding = 5) uniform sampler2DShadow u_sun_shadow_maps[NUM_CASCADES];
+uniform float u_sun_cascade_splits[NUM_CASCADES];
+uniform mat4 u_sun_cascade_view_projections[NUM_CASCADES];
 
 // Material
 layout(binding = 0) uniform sampler2D u_albedo_texture;
@@ -69,6 +76,36 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
   return ggx1 * ggx2;
 }
 
+// --- Shadow Calculation ---
+float ShadowCalculation(vec3 worldPos, vec3 N, vec3 L) {
+  vec4 viewPos = u_view * vec4(worldPos, 1.0);
+  float viewDepth = abs(viewPos.z);
+
+  int layer = -1;
+  for (int i = 0; i < NUM_CASCADES; ++i) {
+    if (viewDepth < u_sun_cascade_splits[i]) {
+      layer = i;
+      break;
+    }
+  }
+  if (layer == -1) layer = NUM_CASCADES - 1;
+
+  vec4 fragPosLightSpace =
+      u_sun_cascade_view_projections[layer] * vec4(worldPos, 1.0);
+  vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+  projCoords = projCoords * 0.5 + 0.5;
+
+  if (projCoords.z > 1.0) return 1.0;
+
+  float bias = max(0.005 * (1.0 - dot(N, L)), 0.001);
+
+  // Hardware PCF
+  float shadow = texture(u_sun_shadow_maps[layer],
+                         vec3(projCoords.xy, projCoords.z - bias));
+
+  return shadow;
+}
+
 // ---------------------
 
 void main() {
@@ -100,7 +137,10 @@ void main() {
   vec3 L = normalize(-u_sun.direction);  // Direction from surface to light
   vec3 H = normalize(V + L);
 
-  // // 3. PBR Calculation
+  // 3. Shadow
+  float shadow = ShadowCalculation(v_world_pos, normal_world, L);
+
+  // 4. PBR Calculation
   vec3 F0 = vec3(0.04);
   F0 = mix(F0, albedo, metallic);
 
@@ -118,14 +158,14 @@ void main() {
   vec3 kD = vec3(1.0) - kS;
   kD *= (1.0 - metallic);
 
-  float NdotL = max(dot(N, L), 0.0);
-  vec3 incoming_radiance = u_sun.color * u_sun.intensity;
+  float NdotL = max(dot(normal_world, L), 0.0);
+  vec3 incoming_radiance = u_sun.color * u_sun.intensity * shadow;
 
   vec3 diffuse = albedo / PI;
 
   vec3 Lo = (kD * diffuse + specular) * incoming_radiance * NdotL;
 
-  // 4. Emission
+  // 5. Emission
   vec3 emission = vec3(0.0);
   if (u_has_emissive_texture > 0) {
     emission = texture(u_emissive_texture, v_uv).rgb;
@@ -135,7 +175,5 @@ void main() {
 
   vec3 color = Lo + emission;
 
-  // No tonemapping here, output HDR
-  // out_color = vec4(normal_world * 0.5 + 0.5, 1.0);
   out_color = vec4(color, 1.0);
 }
