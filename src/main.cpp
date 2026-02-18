@@ -6,6 +6,7 @@
 
 #include "draw_depth.h"
 #include "draw_radiance.h"
+#include "draw_tonemap.h"
 #include "input.h"
 #include "interaction.h"
 #include "loader.h"
@@ -43,19 +44,21 @@ void Run(const std::filesystem::path& scene_path) {
 
   UploadSceneToGPU(*scene);
 
-  ShaderProgram unlit_program = CreateUnlitProgram();
   ShaderProgram depth_program = CreateDepthProgram();
   ShaderProgram depth_vis_program = CreateDepthVisualizerProgram();
+  ShaderProgram radiance_program = CreateRadianceProgram();
+  ShaderProgram tonemap_program = CreateTonemapProgram();
 
-  if (!unlit_program || !depth_program || !depth_vis_program) {
+  if (!depth_program || !depth_vis_program || !radiance_program ||
+      !tonemap_program) {
     LOG(ERROR) << "Failed to create shader programs.";
     return;
   }
 
-  // Initial depth target
+  // Initial HDR target
   int initial_width, initial_height;
   glfwGetFramebufferSize(*window, &initial_width, &initial_height);
-  RenderTarget depth_target = CreateDepthTarget(initial_width, initial_height);
+  RenderTarget hdr_target = CreateHDRTarget(initial_width, initial_height);
 
   InputState input_state;
   InteractionState interaction_state;
@@ -72,11 +75,12 @@ void Run(const std::filesystem::path& scene_path) {
     int fb_width, fb_height;
     glfwGetFramebufferSize(*window, &fb_width, &fb_height);
 
-    // Resize depth target if needed
-    if (fb_width != depth_target.width || fb_height != depth_target.height) {
-      glDeleteFramebuffers(1, &depth_target.fbo);
-      glDeleteTextures(1, &depth_target.depth_buffer);
-      depth_target = CreateDepthTarget(fb_width, fb_height);
+    // Resize HDR target if needed
+    if (fb_width != hdr_target.width || fb_height != hdr_target.height) {
+      glDeleteFramebuffers(1, &hdr_target.fbo);
+      glDeleteTextures(1, &hdr_target.texture);
+      glDeleteTextures(1, &hdr_target.depth_buffer);
+      hdr_target = CreateHDRTarget(fb_width, fb_height);
     }
 
     glViewport(0, 0, fb_width, fb_height);
@@ -84,20 +88,22 @@ void Run(const std::filesystem::path& scene_path) {
     // Enable depth testing.
     glEnable(GL_DEPTH_TEST);
 
-    // Clear to a dark teal color.
-    glClearColor(0.05f, 0.08f, 0.10f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    float aspect = static_cast<float>(fb_width) / static_cast<float>(fb_height);
-    camera.intrinsics.aspect_ratio = aspect;
-
     // 1. Depth Pre-pass
-    DrawDepth(*scene, camera, depth_program, depth_target);
+    // Bind HDR target but disable color writes
+    glBindFramebuffer(GL_FRAMEBUFFER, hdr_target.fbo);
+    glClear(GL_DEPTH_BUFFER_BIT);  // Clear depth only
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
-    // 2. Visualization (Overwrite screen)
-    // DrawDepthVisualization(depth_target, camera, depth_vis_program);
+    DrawDepth(*scene, camera, depth_program, hdr_target);
 
-    DrawSceneUnlit(*scene, camera, unlit_program);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+    // 2. Radiance Pass (Forward PBR)
+    // DrawRadiance will handle clearing color, setting LEQUAL, etc.
+    DrawSceneRadiance(*scene, camera, radiance_program, hdr_target);
+
+    // 3. Tonemapping (to default framebuffer)
+    DrawTonemap(hdr_target, tonemap_program);
 
     glfwSwapBuffers(*window);
   }
@@ -105,8 +111,9 @@ void Run(const std::filesystem::path& scene_path) {
   DestroyWindow(*window);
 
   // Cleanup
-  glDeleteFramebuffers(1, &depth_target.fbo);
-  glDeleteTextures(1, &depth_target.depth_buffer);
+  glDeleteFramebuffers(1, &hdr_target.fbo);
+  glDeleteTextures(1, &hdr_target.texture);
+  glDeleteTextures(1, &hdr_target.depth_buffer);
 }
 
 }  // namespace sh_renderer

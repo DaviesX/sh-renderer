@@ -20,4 +20,8 @@ RenderTarget CreateDepthTarget(int width, int height);
 // No depth buffer. Used for visualization.
 RenderTarget CreateColorTarget(int width, int height);
 
+// Creates a RenderTarget with a float color attachment and a depth attachment.
+// Used for HDR rendering.
+RenderTarget CreateHDRTarget(int width, int height);
+
 }  // namespace sh_renderer

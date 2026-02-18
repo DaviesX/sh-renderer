@@ -75,6 +75,8 @@ std::optional<Window> CreateWindow(unsigned width, unsigned height,
   glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_NATIVE_CONTEXT_API);
   glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE);
 
+  glfwWindowHint(GLFW_SRGB_CAPABLE, GLFW_TRUE);
+
   if (msaa_samples > 0) {
     glfwWindowHint(GLFW_SAMPLES, static_cast<int>(msaa_samples));
   }
@@ -107,6 +109,9 @@ std::optional<Window> CreateWindow(unsigned width, unsigned height,
   glEnable(GL_DEBUG_OUTPUT);
   glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
   // glDebugMessageCallback(DebugMessageCallback, nullptr);
+
+  // Enable SRGB Framebuffer for automatic Linear -> sRGB conversion on output
+  glEnable(GL_FRAMEBUFFER_SRGB);
 
   if (msaa_samples > 0) {
     glEnable(GL_MULTISAMPLE);

@@ -20,7 +20,9 @@ void DrawSceneUnlit(const Scene& scene, const Camera& camera,
 ShaderProgram CreateRadianceProgram();
 
 // TODO: Phase 3
+// TODO: Phase 3
 void DrawSceneRadiance(const Scene& scene, const Camera& camera,
-                       const ShaderProgram& program);
+                       const ShaderProgram& program,
+                       const RenderTarget& hdr_target);
 
 }  // namespace sh_renderer
