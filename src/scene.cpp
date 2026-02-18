@@ -2,9 +2,6 @@
 
 #include <glog/logging.h>
 
-#include <algorithm>
-#include <numeric>
-
 #include "glad.h"
 
 namespace sh_renderer {
@@ -182,13 +179,30 @@ void UploadGeometry(Geometry& geo) {
 
 void UploadSceneToGPU(Scene& scene) {
   // Upload Materials (Textures)
+  // Upload Materials (Textures)
   for (auto& mat : scene.materials) {
-    if (mat.albedo.texture_id == 0) {
+    // Albedo (sRGB)
+    if (mat.albedo.texture_id == 0 && !mat.albedo.pixel_data.empty()) {
       mat.albedo.texture_id = CreateTexture2D(mat.albedo, true);
     }
-    // Normal, Roughness...
-    // For Unlit, we mostly care about Albedo for now or just geometry.
-    // Let's upload others if needed.
+    // Normal (Linear)
+    if (mat.normal_texture.texture_id == 0 &&
+        !mat.normal_texture.pixel_data.empty()) {
+      mat.normal_texture.texture_id =
+          CreateTexture2D(mat.normal_texture, false);
+    }
+    // Metallic-Roughness (Linear)
+    if (mat.metallic_roughness_texture.texture_id == 0 &&
+        !mat.metallic_roughness_texture.pixel_data.empty()) {
+      mat.metallic_roughness_texture.texture_id =
+          CreateTexture2D(mat.metallic_roughness_texture, false);
+    }
+    // Emissive (sRGB)
+    if (mat.emissive_texture && mat.emissive_texture->texture_id == 0 &&
+        !mat.emissive_texture->pixel_data.empty()) {
+      mat.emissive_texture->texture_id =
+          CreateTexture2D(*mat.emissive_texture, true);
+    }
   }
 
   // Upload Geometry

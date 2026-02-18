@@ -32,8 +32,8 @@ void main() {
   vec3 whiteScale = 1.0f / Uncharted2Tonemap(vec3(W));
   color = curr * whiteScale;
 
-  // Gamma correction
-  color = pow(color, vec3(1.0 / 2.2));
+  // Gamma correction is handled by GL_FRAMEBUFFER_SRGB
+  // color = pow(color, vec3(1.0 / 2.2));
 
   out_color = vec4(color, 1.0);
 }

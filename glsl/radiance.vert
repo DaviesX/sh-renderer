@@ -17,9 +17,9 @@ uniform mat4 u_view_proj;
 void main() {
   vec4 world_pos = u_model * vec4(in_position, 1.0);
   v_world_pos = world_pos.xyz;
-  v_normal = mat3(u_model) * in_normal;
+  v_normal = normalize(mat3(u_model) * in_normal);
   v_uv = in_uv;
-  v_tangent = in_tangent;
+  v_tangent = vec4(normalize(mat3(u_model) * in_tangent.xyz), in_tangent.w);
 
   gl_Position = u_view_proj * world_pos;
 }
