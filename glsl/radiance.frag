@@ -163,7 +163,7 @@ void main() {
 
   vec3 diffuse = albedo / PI;
 
-  vec3 Lo = (kD * diffuse + specular) * incoming_radiance * NdotL;
+  vec3 Lo = (kD * diffuse + specular) * (incoming_radiance * NdotL + vec3(0.1));
 
   // 5. Emission
   vec3 emission = vec3(0.0);

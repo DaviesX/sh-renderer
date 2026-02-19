@@ -48,6 +48,7 @@ void Run(const std::filesystem::path& scene_path) {
   ShaderProgram cascaded_shadow_map_program = CreateShadowMapProgram();
   ShaderProgram depth_program = CreateDepthProgram();
   ShaderProgram depth_vis_program = CreateDepthVisualizerProgram();
+  ShaderProgram shadow_vis_program = CreateShadowMapVisualizationProgram();
   ShaderProgram radiance_program = CreateRadianceProgram();
   ShaderProgram tonemap_program = CreateTonemapProgram();
 

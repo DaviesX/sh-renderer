@@ -14,8 +14,6 @@ namespace {
 
 const unsigned kCascadeShadowMapSizes[kNumShadowMapCascades] = {
     1024, 512, 256};  // Powers of two for best performance.
-const float kCascadeSplitProportions[kNumShadowMapCascades] = {
-    0.1f, 0.3f, 0.6f};  // Ratios for cascade splits.
 
 }  // namespace
 
@@ -135,6 +133,86 @@ void DrawCascadedShadowMap(
   glCullFace(GL_BACK);
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+namespace {
+
+// Fullscreen quad geometry
+const float kQuadVertices[] = {
+    // positions        // uvs
+    -1.0f, 1.0f, 0.0f, 0.0f,  1.0f, -1.0f, -1.0f, 0.0f,
+    0.0f,  0.0f, 1.0f, -1.0f, 0.0f, 1.0f,  0.0f,
+
+    -1.0f, 1.0f, 0.0f, 0.0f,  1.0f, 1.0f,  -1.0f, 0.0f,
+    1.0f,  0.0f, 1.0f, 1.0f,  0.0f, 1.0f,  1.0f};
+
+GLuint GetQuadVAO() {
+  static GLuint vao = 0;
+  if (vao == 0) {
+    GLuint vbo;
+    glCreateVertexArrays(1, &vao);
+    glCreateBuffers(1, &vbo);
+    glNamedBufferStorage(vbo, sizeof(kQuadVertices), kQuadVertices, 0);
+
+    // Position
+    glEnableVertexArrayAttrib(vao, 0);
+    glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(vao, 0, 0);
+
+    // UV
+    glEnableVertexArrayAttrib(vao, 2);  // location 2 as per fullscreen.vert
+    glVertexArrayAttribFormat(vao, 2, 2, GL_FLOAT, GL_FALSE, 3 * sizeof(float));
+    glVertexArrayAttribBinding(vao, 2, 0);
+
+    glVertexArrayVertexBuffer(vao, 0, vbo, 0, 5 * sizeof(float));
+  }
+  return vao;
+}
+
+}  // namespace
+
+ShaderProgram CreateShadowMapVisualizationProgram() {
+  auto program = ShaderProgram::CreateGraphics("glsl/fullscreen.vert",
+                                               "glsl/shadow_vis.frag");
+  if (!program) {
+    LOG(ERROR) << "Failed to create shadow map visualization program.";
+    return {};
+  }
+  return std::move(*program);
+}
+
+void DrawCascadedShadowMapVisualization(
+    const std::vector<RenderTarget>& shadow_map_targets, Eigen::Vector2i offset,
+    Eigen::Vector2i size, const ShaderProgram& program,
+    const RenderTarget& out) {
+  if (!program) return;
+  if (shadow_map_targets.empty()) return;
+
+  glBindFramebuffer(GL_FRAMEBUFFER, out.fbo);
+  glDisable(GL_DEPTH_TEST);
+
+  program.Use();
+  program.Uniform("u_shadow_map", 0);
+
+  int x = offset.x();
+  for (size_t i = 0; i < shadow_map_targets.size(); ++i) {
+    const auto& target = shadow_map_targets[i];
+
+    // Temporarily disable comparison mode so we can sample raw depth.
+    glTextureParameteri(target.depth_buffer, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+
+    glViewport(x, offset.y(), size.x(), size.y());
+    glBindTextureUnit(0, target.depth_buffer);
+
+    glBindVertexArray(GetQuadVAO());
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+
+    // Restore comparison mode for shadow mapping.
+    glTextureParameteri(target.depth_buffer, GL_TEXTURE_COMPARE_MODE,
+                        GL_COMPARE_REF_TO_TEXTURE);
+
+    x += size.x();
+  }
 }
 
 }  // namespace sh_renderer

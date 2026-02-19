@@ -31,6 +31,7 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
                        const ShaderProgram& program,
                        const RenderTarget& hdr_target) {
   if (!program) return;
+  program.Use();
 
   // Bind Sun Shadow Maps and set uniforms
   if (!sun_cascades.empty() && !sun_shadow_maps.empty()) {
