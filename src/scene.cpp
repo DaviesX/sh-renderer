@@ -2,6 +2,9 @@
 
 #include <glog/logging.h>
 
+#include <algorithm>
+#include <cmath>
+
 #include "glad.h"
 
 namespace sh_renderer {
@@ -16,8 +19,9 @@ GLuint CreateTexture2D(const Texture& texture, bool srgb = true) {
 
   // Determine number of levels
   GLsizei levels = 1;
-  // TODO: Generate mipmaps? For now just 1 level.
-  // levels = 1 + floor(log2(max(width, height)));
+  // Generate mipmaps
+  levels = 1 + static_cast<GLsizei>(std::floor(
+                   std::log2(std::max(texture.width, texture.height))));
 
   GLenum internal_format = GL_RGBA8;
   if (texture.channels == 3) {
@@ -40,13 +44,20 @@ GLuint CreateTexture2D(const Texture& texture, bool srgb = true) {
   if (!texture.pixel_data.empty()) {
     glTextureSubImage2D(tex, 0, 0, 0, texture.width, texture.height, format,
                         GL_UNSIGNED_BYTE, texture.pixel_data.data());
+    glGenerateTextureMipmap(tex);
   }
 
   // Set parameters
   glTextureParameteri(tex, GL_TEXTURE_WRAP_S, GL_REPEAT);
   glTextureParameteri(tex, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  glTextureParameteri(tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTextureParameteri(tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
   glTextureParameteri(tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+  if (GLAD_GL_ARB_texture_filter_anisotropic) {
+    GLfloat max_anisotropy = 0.0f;
+    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &max_anisotropy);
+    glTextureParameterf(tex, GL_TEXTURE_MAX_ANISOTROPY, max_anisotropy);
+  }
 
   return tex;
 }
