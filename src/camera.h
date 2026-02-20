@@ -9,7 +9,7 @@ struct CameraIntrinsics {
   float fov_y_radians = 0.658f;
   float aspect_ratio = 1.777f;
   float z_near = 0.1f;
-  float z_far = 100.0f;
+  float z_far = 200.0f;
 };
 
 struct Camera {

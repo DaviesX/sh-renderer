@@ -92,14 +92,11 @@ float ShadowCalculation(vec3 worldPos, vec3 N, vec3 L) {
 
   vec4 fragPosLightSpace =
       u_sun_cascade_view_projections[layer] * vec4(worldPos, 1.0);
-  vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+  vec3 projCoords = (fragPosLightSpace.xyz) / fragPosLightSpace.w;
   projCoords = projCoords * 0.5 + 0.5;
 
-  if (projCoords.z > 1.0) return 1.0;
-
-  float bias = max(0.005 * (1.0 - dot(N, L)), 0.001);
-
   // Hardware PCF
+  float bias = max(0.0005 * (1.0 - dot(N, L)), 0.0001);
   float shadow = texture(u_sun_shadow_maps[layer],
                          vec3(projCoords.xy, projCoords.z - bias));
 
@@ -138,7 +135,7 @@ void main() {
   vec3 H = normalize(V + L);
 
   // 3. Shadow
-  float shadow = ShadowCalculation(v_world_pos, normal_world, L);
+  float shadow = ShadowCalculation(v_world_pos, N, L);
 
   // 4. PBR Calculation
   vec3 F0 = vec3(0.04);

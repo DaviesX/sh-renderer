@@ -13,7 +13,7 @@ namespace sh_renderer {
 namespace {
 
 const unsigned kCascadeShadowMapSizes[kNumShadowMapCascades] = {
-    1024, 512, 256};  // Powers of two for best performance.
+    2048, 1024, 512};  // Powers of two for best performance.
 
 }  // namespace
 
