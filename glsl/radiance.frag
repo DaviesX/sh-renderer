@@ -69,12 +69,13 @@ ShadingAngles ComputeShadingAngles(vec3 N, vec3 V, vec3 L, vec3 H) {
   return angles;
 }
 
-vec3 FresnelSchlick(ShadingAngles angles, vec3 F0) {
-  return F0 + (1.0 - F0) * pow(max(1.0 - angles.v_dot_h, 0.0), 5.0);
+vec3 FresnelSchlick(float v_dot_h, vec3 F0) {
+  return F0 + (1.0 - F0) * pow(max(1.0 - v_dot_h, 0.0), 5.0);
 }
 
-vec3 FresnelSchlick(float cos_theta, vec3 F0) {
-  return F0 + (1.0 - F0) * pow(max(1.0 - cos_theta, 0.0), 5.0);
+vec3 FresnelSchlickRoughness(float cos_theta, vec3 F0, float roughness) {
+  return F0 + (max(vec3(1.0 - roughness), F0) - F0) *
+                  pow(max(1.0 - cos_theta, 0.0), 5.0);
 }
 
 float DistributionGGX(ShadingAngles angles, float roughness) {
@@ -120,7 +121,7 @@ float DistributionDisney(ShadingAngles angles, float roughness) {
 
 vec3 ComputeDirectBRDF(ShadingAngles angles, vec3 f0, vec3 albedo,
                        float metallic, float roughness, float occlusion) {
-  vec3 F = FresnelSchlick(angles, f0);
+  vec3 F = FresnelSchlick(angles.v_dot_h, f0);
   float NDF = DistributionGGX(angles, roughness);
   float G = GeometrySmith(angles, roughness);
 
@@ -139,8 +140,8 @@ vec3 ComputeDirectBRDF(ShadingAngles angles, vec3 f0, vec3 albedo,
 
 vec3 ComputeIndirectBRDF(ShadingAngles angles, vec3 irradiance,
                          vec3 reflection_radiance, vec3 f0, vec3 albedo,
-                         float metallic, float occlusion) {
-  vec3 fresnel = FresnelSchlick(angles.n_dot_v, f0);
+                         float metallic, float roughness, float occlusion) {
+  vec3 fresnel = FresnelSchlickRoughness(angles.n_dot_v, f0, roughness);
 
   vec3 specular = fresnel * reflection_radiance;
 
@@ -363,7 +364,7 @@ void main() {
 
   vec3 l_indirect = ComputeIndirectBRDF(angles, indirect_irradiance,
                                         indirect_reflection_radiance, f0,
-                                        albedo, metallic, occlusion);
+                                        albedo, metallic, roughness, occlusion);
 
   // PBR Calculation
   vec3 direct_brdf =
