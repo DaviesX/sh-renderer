@@ -102,7 +102,7 @@ void Run(const std::filesystem::path& scene_path) {
     std::vector<Cascade> sun_cascades;
     std::optional<Light> sun_light = FindSunLight(*scene);
     if (sun_light) {
-      sun_cascades = ComputeCascades(*sun_light, camera, kNumShadowMapCascades);
+      sun_cascades = ComputeCascades(*sun_light, camera);
     }
     DrawCascadedShadowMap(*scene, camera, cascaded_shadow_map_program,
                           sun_cascades, sun_shadow_map_targets);

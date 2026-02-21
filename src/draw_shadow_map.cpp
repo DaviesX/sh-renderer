@@ -10,12 +10,6 @@
 #include "shader.h"
 
 namespace sh_renderer {
-namespace {
-
-const unsigned kCascadeShadowMapSizes[kNumShadowMapCascades] = {
-    2048, 1024, 512};  // Powers of two for best performance.
-
-}  // namespace
 
 ShaderProgram CreateShadowMapProgram() {
   auto program =
@@ -33,8 +27,8 @@ std::vector<RenderTarget> CreateCascadedShadowMapTargets() {
 
   for (unsigned i = 0; i < kNumShadowMapCascades; ++i) {
     RenderTarget target;
-    target.width = kCascadeShadowMapSizes[i];
-    target.height = kCascadeShadowMapSizes[i];
+    target.width = kCascadeShadowMapSize;
+    target.height = kCascadeShadowMapSize;
 
     // Create Depth Texture
     glCreateTextures(GL_TEXTURE_2D, 1, &target.depth_buffer);

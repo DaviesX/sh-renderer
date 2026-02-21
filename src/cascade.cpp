@@ -52,18 +52,15 @@ Eigen::Matrix4f Ortho(float left, float right, float bottom, float top,
 }  // namespace
 
 std::vector<Cascade> ComputeCascades(const Light& sun_light,
-                                     const Camera& camera,
-                                     unsigned num_cascades) {
+                                     const Camera& camera) {
   std::vector<Cascade> cascades;
-  cascades.resize(num_cascades);
+  cascades.resize(kNumShadowMapCascades);
 
-  // TODO: Make these configurable or pass them in.
-  // Using a lambda of 0.5 for mix of log and uniform splits creates good
-  // distribution for most scenes.
-  const float lambda = 0.5f;
+  const float lambda = 0.86f;
 
-  std::vector<float> cascade_splits = CalculateCascadeSplits(
-      camera.intrinsics.z_near, camera.intrinsics.z_far, num_cascades, lambda);
+  std::vector<float> cascade_splits =
+      CalculateCascadeSplits(camera.intrinsics.z_near, camera.intrinsics.z_far,
+                             kNumShadowMapCascades, lambda);
 
   // Calculate view-projection-inverse for the main camera to get frustum
   // corners. We need to rebuild projection matrices for each slice. However, a
@@ -86,7 +83,7 @@ std::vector<Cascade> ComputeCascades(const Light& sun_light,
   Eigen::Matrix4f light_view =
       LookAt(Eigen::Vector3f::Zero(), light_dir, light_up);
 
-  for (unsigned i = 0; i < num_cascades; ++i) {
+  for (unsigned i = 0; i < kNumShadowMapCascades; ++i) {
     float prev_split_dist = cascade_splits[i];
     float split_dist = cascade_splits[i + 1];
 
@@ -143,59 +140,49 @@ std::vector<Cascade> ComputeCascades(const Light& sun_light,
     }
 
     // Stabilize shadow map (Texel snapping)
-    // We assume a standard shadow map resolution per cascade.
-    // Since we don't have the exact resolution passed in here easily,
-    // we'll assume a safe default (e.g. 1024/2048) or dynamic based on cascade
-    // index if known. Let's assume 1024 for now or pass it. Better: just snap
-    // to a reasonably small unit to avoid sub-pixel jitter.
-    float world_units_per_texel = (max_x - min_x) / 1024.0f;  // Approximate
-    min_x = std::floor(min_x / world_units_per_texel) * world_units_per_texel;
-    max_x = std::floor(max_x / world_units_per_texel) * world_units_per_texel;
-    min_y = std::floor(min_y / world_units_per_texel) * world_units_per_texel;
-    max_y = std::floor(max_y / world_units_per_texel) * world_units_per_texel;
+    // 1. Find the center and static extents of the bounding box
+    float center_x = (min_x + max_x) * 0.5f;
+    float center_y = (min_y + max_y) * 0.5f;
+    float extent_x = (max_x - min_x) * 0.5f;
+    float extent_y = (max_y - min_y) * 0.5f;
 
-    // Expand Z range to include potential occluders (e.g. objects between sun
-    // and frustum). The "near" in light space corresponds to objects closer to
-    // the light source. Since light looks down -Z, larger Z is further away. In
-    // Light View Space, if we look down -Z, then positive Z is behind us (which
-    // is confusing with typical ortho). Let's check LookAt convention: -Z is
-    // forward. So objects closer to light have larger Z (less negative) than
-    // objects further away? LookAt: Z axis is -(Target - Eye). So Z points
-    // *towards* the eye. Light is at "0" looking at "Direction". If direction
-    // is (0, -1, 0), then Z axis is (0, 1, 0). Points "below" the light have
-    // negative Z locally? Let's stick to standard Ortho: near/far are distances
-    // from eye. Ortho(l, r, b, t, n, f) -> maps [-n, -f] to [-1, 1]. So we need
-    // to encompass [min_z, max_z] which are actual Z coordinates in light
-    // space. If min_z = -100, max_z = -10, then we need near = 10, far = 100.
-    // To include occluders, we need to decrease min_z (make it more negative /
-    // larger distance). Wait, if Z points back towards light, then "closer to
-    // light" is higher Z. Let's just use raw coords and Ortho projection matrix
-    // manually.
+    // 2. Determine actual resolution for this cascade
+    float resolution = 1024.f;
 
-    // We want to map [min_x, max_x] -> [-1, 1]
-    // [min_y, max_y] -> [-1, 1]
-    // [min_z - padding, max_z] -> [-1, 1] (or [0, 1] dep on depth range).
-    // OpenGL clip Z is [-1, 1].
-    // Let's widen the Z range significantly towards the light.
-    float z_mult = 10.0f;
-    if (min_z < 0)
-      min_z *= z_mult;
-    else
-      min_z /= z_mult;
-    if (max_z < 0)
-      max_z /= z_mult;
-    else
-      max_z *= z_mult;
+    float world_units_per_texel_x = (extent_x * 2.0f) / resolution;
+    float world_units_per_texel_y = (extent_y * 2.0f) / resolution;
 
-    // Let's just add a large buffer.
-    min_z -= 200.0f;
-    max_z += 50.0f;
+    // 3. Snap the center to the texel grid
+    center_x = std::floor(center_x / world_units_per_texel_x) *
+               world_units_per_texel_x;
+    center_y = std::floor(center_y / world_units_per_texel_y) *
+               world_units_per_texel_y;
 
-    Eigen::Matrix4f ortho = Ortho(min_x, max_x, min_y, max_y, -max_z, -min_z);
+    // 4. Reconstruct min/max using the snapped center and static extents
+    min_x = center_x - extent_x;
+    max_x = center_x + extent_x;
+    min_y = center_y - extent_y;
+    max_y = center_y + extent_y;
+
+    // Pull the near plane back by a fixed amount (e.g., 20 meters) to catch
+    // the non-visible shadow casters.
+    // Leave the far plane exactly where the frustum ends.
+    //
+    // TODO: In the next phase, we will determine the closes occluder from the
+    // scene geometry and use that as the near plane. This will allow us to
+    // reduce the amount of depth precision used for empty space.
+    float z_padding = 20.0f;
+
+    // Note: In typical lookAt setups looking down -Z, the "near" plane is
+    // actually the max_z.
+    float near_plane = -(max_z + z_padding);
+    float far_plane = -min_z;
+    Eigen::Matrix4f ortho =
+        Ortho(min_x, max_x, min_y, max_y, near_plane, far_plane);
 
     cascades[i].split_depth = split_dist;
-    cascades[i].near = -max_z;  // Ortho near
-    cascades[i].far = -min_z;   // Ortho far
+    cascades[i].near = near_plane;
+    cascades[i].far = far_plane;
     cascades[i].left = min_x;
     cascades[i].right = max_x;
     cascades[i].bottom = min_y;

@@ -7,6 +7,9 @@
 
 namespace sh_renderer {
 
+const unsigned kNumShadowMapCascades = 3;
+const unsigned kCascadeShadowMapSize = 1024;
+
 struct Cascade {
   // View-space depth limit for this cascade.
   float split_depth;
@@ -25,7 +28,6 @@ struct Cascade {
 
 // Computes the cascade bounds for the given camera and the sun light.
 std::vector<Cascade> ComputeCascades(const Light& sun_light,
-                                     const Camera& camera,
-                                     unsigned num_cascades);
+                                     const Camera& camera);
 
 }  // namespace sh_renderer

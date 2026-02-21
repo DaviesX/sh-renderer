@@ -8,8 +8,6 @@
 
 namespace sh_renderer {
 
-const unsigned kNumShadowMapCascades = 3;
-
 // Creates a shadow map shader program.
 ShaderProgram CreateShadowMapProgram();
 

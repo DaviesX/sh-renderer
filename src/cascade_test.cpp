@@ -33,10 +33,8 @@ TEST(CascadeTest, ReturnsRequestedNumberOfCascades) {
   Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
   Camera camera = MakeDefaultCamera();
 
-  for (unsigned n = 1; n <= 4; ++n) {
-    auto cascades = ComputeCascades(sun, camera, n);
-    EXPECT_EQ(cascades.size(), n) << "num_cascades=" << n;
-  }
+  auto cascades = ComputeCascades(sun, camera);
+  EXPECT_EQ(cascades.size(), kNumShadowMapCascades);
 }
 
 // --- Split Depths ---
@@ -45,7 +43,7 @@ TEST(CascadeTest, LastCascadeSplitEqualsZFar) {
   Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
   Camera camera = MakeDefaultCamera();
 
-  auto cascades = ComputeCascades(sun, camera, 3);
+  auto cascades = ComputeCascades(sun, camera);
   EXPECT_NEAR(cascades.back().split_depth, camera.intrinsics.z_far, kEpsilon);
 }
 
@@ -53,7 +51,7 @@ TEST(CascadeTest, SplitDepthsAreMonotonicallyIncreasing) {
   Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
   Camera camera = MakeDefaultCamera();
 
-  auto cascades = ComputeCascades(sun, camera, 4);
+  auto cascades = ComputeCascades(sun, camera);
   float prev = camera.intrinsics.z_near;
   for (const auto& c : cascades) {
     EXPECT_GT(c.split_depth, prev);
@@ -65,7 +63,7 @@ TEST(CascadeTest, SingleCascadeCoversEntireRange) {
   Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
   Camera camera = MakeDefaultCamera();
 
-  auto cascades = ComputeCascades(sun, camera, 1);
+  auto cascades = ComputeCascades(sun, camera);
   ASSERT_EQ(cascades.size(), 1u);
   EXPECT_NEAR(cascades[0].split_depth, camera.intrinsics.z_far, kEpsilon);
 }
@@ -76,7 +74,7 @@ TEST(CascadeTest, OrthoBoundsAreValid) {
   Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
   Camera camera = MakeDefaultCamera();
 
-  auto cascades = ComputeCascades(sun, camera, 3);
+  auto cascades = ComputeCascades(sun, camera);
   for (size_t i = 0; i < cascades.size(); ++i) {
     const auto& c = cascades[i];
     EXPECT_LT(c.left, c.right) << "cascade " << i;
@@ -89,7 +87,7 @@ TEST(CascadeTest, LaterCascadesAreLargerOrEqual) {
   Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
   Camera camera = MakeDefaultCamera();
 
-  auto cascades = ComputeCascades(sun, camera, 4);
+  auto cascades = ComputeCascades(sun, camera);
   for (size_t i = 1; i < cascades.size(); ++i) {
     float prev_width = cascades[i - 1].right - cascades[i - 1].left;
     float cur_width = cascades[i].right - cascades[i].left;
@@ -103,7 +101,7 @@ TEST(CascadeTest, ViewProjectionMatrixIsFinite) {
   Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
   Camera camera = MakeDefaultCamera();
 
-  auto cascades = ComputeCascades(sun, camera, 3);
+  auto cascades = ComputeCascades(sun, camera);
   for (size_t i = 0; i < cascades.size(); ++i) {
     EXPECT_TRUE(cascades[i].view_projection_matrix.allFinite())
         << "cascade " << i;
@@ -115,7 +113,7 @@ TEST(CascadeTest, CameraOriginMapsInsideNDC) {
   Camera camera = MakeDefaultCamera();
   camera.position = Eigen::Vector3f::Zero();
 
-  auto cascades = ComputeCascades(sun, camera, 3);
+  auto cascades = ComputeCascades(sun, camera);
   // The origin should project into the first cascade's NDC cube since the
   // camera is at the origin and the first cascade covers nearby geometry.
   Eigen::Vector4f origin_h(0, 0, 0, 1);
@@ -137,7 +135,7 @@ TEST(CascadeTest, DiagonalLightProducesValidCascades) {
   Light sun = MakeSunLight(Eigen::Vector3f(1, -1, -1).normalized());
   Camera camera = MakeDefaultCamera();
 
-  auto cascades = ComputeCascades(sun, camera, 3);
+  auto cascades = ComputeCascades(sun, camera);
   ASSERT_EQ(cascades.size(), 3u);
   for (size_t i = 0; i < cascades.size(); ++i) {
     EXPECT_TRUE(cascades[i].view_projection_matrix.allFinite())
@@ -152,7 +150,7 @@ TEST(CascadeTest, HorizontalLightProducesValidCascades) {
   Light sun = MakeSunLight(Eigen::Vector3f(-1, 0, 0));
   Camera camera = MakeDefaultCamera();
 
-  auto cascades = ComputeCascades(sun, camera, 3);
+  auto cascades = ComputeCascades(sun, camera);
   ASSERT_EQ(cascades.size(), 3u);
   for (size_t i = 0; i < cascades.size(); ++i) {
     EXPECT_TRUE(cascades[i].view_projection_matrix.allFinite())
@@ -171,8 +169,8 @@ TEST(CascadeTest, TranslatedCameraShiftsCascadeBounds) {
   Camera cam_b = MakeDefaultCamera();
   cam_b.position = Eigen::Vector3f(50, 0, 50);
 
-  auto cascades_a = ComputeCascades(sun, cam_a, 2);
-  auto cascades_b = ComputeCascades(sun, cam_b, 2);
+  auto cascades_a = ComputeCascades(sun, cam_a);
+  auto cascades_b = ComputeCascades(sun, cam_b);
 
   // The view-projection matrices must differ because the frustums are in
   // different world-space regions.
@@ -189,8 +187,8 @@ TEST(CascadeTest, RotatedCameraChangesCascadeBounds) {
   cam_b.orientation = Eigen::Quaternionf(Eigen::AngleAxisf(
       static_cast<float>(M_PI / 2.0), Eigen::Vector3f::UnitY()));
 
-  auto cascades_a = ComputeCascades(sun, cam_a, 2);
-  auto cascades_b = ComputeCascades(sun, cam_b, 2);
+  auto cascades_a = ComputeCascades(sun, cam_a);
+  auto cascades_b = ComputeCascades(sun, cam_b);
 
   EXPECT_FALSE(cascades_a[0].view_projection_matrix.isApprox(
       cascades_b[0].view_projection_matrix, kEpsilon));
@@ -203,7 +201,7 @@ TEST(CascadeTest, NearlyVerticalLightUsesAlternateUp) {
   Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0.001f).normalized());
   Camera camera = MakeDefaultCamera();
 
-  auto cascades = ComputeCascades(sun, camera, 3);
+  auto cascades = ComputeCascades(sun, camera);
   for (size_t i = 0; i < cascades.size(); ++i) {
     EXPECT_TRUE(cascades[i].view_projection_matrix.allFinite())
         << "cascade " << i;
@@ -216,7 +214,7 @@ TEST(CascadeTest, ZRangeIncludesPadding) {
   Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
   Camera camera = MakeDefaultCamera();
 
-  auto cascades = ComputeCascades(sun, camera, 1);
+  auto cascades = ComputeCascades(sun, camera);
   // The Z range (far - near) should be larger than the raw frustum extent
   // because the implementation adds padding for occluders (200 + 50 units).
   float z_range = cascades[0].far - cascades[0].near;
