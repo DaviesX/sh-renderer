@@ -1,6 +1,7 @@
 #include "scene.h"
 
 #include <glog/logging.h>
+#include <tinyexr.h>
 
 #include <algorithm>
 #include <cmath>
@@ -50,6 +51,55 @@ GLuint CreateTexture2D(const Texture& texture, bool srgb = true) {
   // Set parameters
   glTextureParameteri(tex, GL_TEXTURE_WRAP_S, GL_REPEAT);
   glTextureParameteri(tex, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  glTextureParameteri(tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+  glTextureParameteri(tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+  if (GLAD_GL_ARB_texture_filter_anisotropic) {
+    GLfloat max_anisotropy = 0.0f;
+    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &max_anisotropy);
+    glTextureParameterf(tex, GL_TEXTURE_MAX_ANISOTROPY, max_anisotropy);
+  }
+
+  return tex;
+}
+
+GLuint CreateTexture2D(const Texture32F& texture) {
+  if (texture.width == 0 || texture.height == 0) return 0;
+
+  GLuint tex;
+  glCreateTextures(GL_TEXTURE_2D, 1, &tex);
+
+  // Determine number of levels
+  GLsizei levels = 1;
+  // Generate mipmaps
+  levels = 1 + static_cast<GLsizei>(std::floor(
+                   std::log2(std::max(texture.width, texture.height))));
+
+  GLenum internal_format = GL_RGBA16F;
+  if (texture.channels == 3) {
+    internal_format = GL_RGB16F;
+  } else if (texture.channels == 1) {
+    internal_format = GL_R16F;
+  }
+
+  glTextureStorage2D(tex, levels, internal_format, texture.width,
+                     texture.height);
+
+  GLenum format = GL_RGBA;
+  if (texture.channels == 3)
+    format = GL_RGB;
+  else if (texture.channels == 1)
+    format = GL_RED;
+
+  if (!texture.pixel_data.empty()) {
+    glTextureSubImage2D(tex, 0, 0, 0, texture.width, texture.height, format,
+                        GL_FLOAT, texture.pixel_data.data());
+    glGenerateTextureMipmap(tex);
+  }
+
+  // Set parameters
+  glTextureParameteri(tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTextureParameteri(tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   glTextureParameteri(tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
   glTextureParameteri(tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
@@ -216,6 +266,15 @@ void UploadSceneToGPU(Scene& scene) {
     }
   }
 
+  // Upload Lightmaps
+  for (int i = 0; i < 3; ++i) {
+    if (scene.lightmaps_packed[i].texture_id == 0 &&
+        !scene.lightmaps_packed[i].pixel_data.empty()) {
+      scene.lightmaps_packed[i].texture_id =
+          CreateTexture2D(scene.lightmaps_packed[i]);
+    }
+  }
+
   // Upload Geometry
   for (auto& geo : scene.geometries) {
     UploadGeometry(geo);
@@ -276,6 +335,48 @@ std::optional<Light> FindSunLight(const Scene& scene) {
     }
   }
   return std::nullopt;
+}
+
+void LoadLightmaps(Scene& scene, const std::filesystem::path& gltf_file) {
+  std::filesystem::path base_path = gltf_file.parent_path();
+  std::string file_names[3] = {"lightmap_packed_0.exr", "lightmap_packed_1.exr",
+                               "lightmap_packed_2.exr"};
+
+  for (int i = 0; i < 3; ++i) {
+    std::string path = (base_path / file_names[i]).string();
+    float* out_rgba = nullptr;
+    int width;
+    int height;
+    const char* err = nullptr;
+
+    int ret = LoadEXR(&out_rgba, &width, &height, path.c_str(), &err);
+    if (ret != TINYEXR_SUCCESS) {
+      if (err) {
+        LOG(ERROR) << "LoadEXR error: " << err << " for file: " << path;
+        FreeEXRErrorMessage(err);
+      } else {
+        LOG(ERROR) << "Failed to load EXR: " << path;
+      }
+
+      // Fallback
+      scene.lightmaps_packed[i].width = 1;
+      scene.lightmaps_packed[i].height = 1;
+      scene.lightmaps_packed[i].channels = 4;
+      scene.lightmaps_packed[i].pixel_data.resize(4);
+      if (i == 0) {
+        scene.lightmaps_packed[i].pixel_data = {0.0f, 0.0f, 0.0f, 1.0f};
+      } else {
+        scene.lightmaps_packed[i].pixel_data = {0.0f, 0.0f, 0.0f, 0.0f};
+      }
+    } else {
+      scene.lightmaps_packed[i].width = width;
+      scene.lightmaps_packed[i].height = height;
+      scene.lightmaps_packed[i].channels = 4;
+      scene.lightmaps_packed[i].pixel_data.assign(
+          out_rgba, out_rgba + width * height * 4);
+      free(out_rgba);
+    }
+  }
 }
 
 }  // namespace sh_renderer

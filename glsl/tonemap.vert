@@ -1,6 +1,6 @@
 #version 460 core
 
-layout(location = 0) out vec2 v_uv;
+out vec2 v_uv;
 
 void main() {
   vec2 vertices[3] = vec2[3](vec2(-1, -1), vec2(3, -1), vec2(-1, 3));

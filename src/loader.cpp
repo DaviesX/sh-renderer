@@ -675,6 +675,9 @@ std::optional<Scene> LoadScene(const std::filesystem::path& gltf_file) {
   // Process Area Lights (from emissive materials)
   ProcessAreaLights(scene.materials, scene.geometries, &scene.lights);
 
+  // Load Baked Indirect SH Lightmaps
+  LoadLightmaps(scene, gltf_file);
+
   return scene;
 }
 

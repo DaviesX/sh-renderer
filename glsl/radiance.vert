@@ -9,6 +9,7 @@ layout(location = 4) in vec4 in_tangent;
 out vec3 v_world_pos;
 out vec3 v_normal;
 out vec2 v_uv;
+out vec2 v_lightmap_uv;
 out vec4 v_tangent;
 
 uniform mat4 u_model;
@@ -19,6 +20,7 @@ void main() {
   v_world_pos = world_pos.xyz;
   v_normal = normalize(mat3(u_model) * in_normal);
   v_uv = in_uv;
+  v_lightmap_uv = in_lightmap_uv;
   v_tangent = vec4(normalize(mat3(u_model) * in_tangent.xyz), in_tangent.w);
 
   gl_Position = u_view_proj * world_pos;

@@ -91,6 +91,17 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
     program.Uniform("u_sun.intensity", 1.0f);
   }
 
+  // Bind Lightmap Textures
+  if (scene.lightmaps_packed[0].texture_id != 0) {
+    glBindTextureUnit(8, scene.lightmaps_packed[0].texture_id);
+    glBindTextureUnit(9, scene.lightmaps_packed[1].texture_id);
+    glBindTextureUnit(10, scene.lightmaps_packed[2].texture_id);
+  } else {
+    glBindTextureUnit(8, 0);
+    glBindTextureUnit(9, 0);
+    glBindTextureUnit(10, 0);
+  }
+
   for (const auto& geo : scene.geometries) {
     if (geo.vao == 0) continue;
 

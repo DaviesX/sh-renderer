@@ -3,6 +3,7 @@
 #include <embree4/rtcore.h>
 
 #include <Eigen/Dense>
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -117,6 +118,9 @@ struct Scene {
   std::vector<Geometry> geometries;
   std::vector<Material> materials;
   std::vector<Light> lights;
+
+  // Baked Indirect SH Lightmaps
+  std::array<Texture32F, 3> lightmaps_packed;
 };
 
 // Uploads the scene geometry and textures to the GPU.
@@ -134,5 +138,8 @@ float SurfaceArea(const Geometry& geometry);
 
 // Returns the sun light if it exists.
 std::optional<Light> FindSunLight(const Scene& scene);
+
+// Loads the SH lightmap EXRs into the scene.
+void LoadLightmaps(Scene& scene, const std::filesystem::path& gltf_file);
 
 }  // namespace sh_renderer
