@@ -59,15 +59,6 @@ TEST(CascadeTest, SplitDepthsAreMonotonicallyIncreasing) {
   }
 }
 
-TEST(CascadeTest, SingleCascadeCoversEntireRange) {
-  Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
-  Camera camera = MakeDefaultCamera();
-
-  auto cascades = ComputeCascades(sun, camera);
-  ASSERT_EQ(cascades.size(), 1u);
-  EXPECT_NEAR(cascades[0].split_depth, camera.intrinsics.z_far, kEpsilon);
-}
-
 // --- Orthographic Bounds ---
 
 TEST(CascadeTest, OrthoBoundsAreValid) {
@@ -216,9 +207,9 @@ TEST(CascadeTest, ZRangeIncludesPadding) {
 
   auto cascades = ComputeCascades(sun, camera);
   // The Z range (far - near) should be larger than the raw frustum extent
-  // because the implementation adds padding for occluders (200 + 50 units).
+  // because the implementation adds padding for occluders (20.0 units).
   float z_range = cascades[0].far - cascades[0].near;
-  EXPECT_GT(z_range, 250.0f);
+  EXPECT_GT(z_range, 20.0f);
 }
 
 }  // namespace

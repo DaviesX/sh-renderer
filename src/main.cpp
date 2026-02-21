@@ -7,6 +7,7 @@
 #include "draw_depth.h"
 #include "draw_radiance.h"
 #include "draw_shadow_map.h"
+#include "draw_sky.h"
 #include "draw_tonemap.h"
 #include "input.h"
 #include "interaction.h"
@@ -19,6 +20,8 @@ DEFINE_string(input, "", "Path to the glTF scene file to render.");
 DEFINE_uint32(width, 1280, "Width of the window.");
 DEFINE_uint32(height, 720, "Height of the window.");
 DEFINE_uint32(msaa_samples, 0, "Number of MSAA samples.");
+DEFINE_uint32(log_frame_time_interval, 100,
+              "Log average frame time every N frames.");
 
 namespace sh_renderer {
 
@@ -50,10 +53,11 @@ void Run(const std::filesystem::path& scene_path) {
   ShaderProgram depth_vis_program = CreateDepthVisualizerProgram();
   ShaderProgram shadow_vis_program = CreateShadowMapVisualizationProgram();
   ShaderProgram radiance_program = CreateRadianceProgram();
+  ShaderProgram sky_program = CreateSkyAnalyticProgram();
   ShaderProgram tonemap_program = CreateTonemapProgram();
 
   if (!depth_program || !depth_vis_program || !radiance_program ||
-      !tonemap_program) {
+      !sky_program || !tonemap_program) {
     LOG(ERROR) << "Failed to create shader programs.";
     return;
   }
@@ -68,6 +72,9 @@ void Run(const std::filesystem::path& scene_path) {
   InputState input_state;
   InteractionState interaction_state;
   bool should_close = false;
+
+  uint32_t frame_count = 0;
+  double last_time = glfwGetTime();
 
   while (!glfwWindowShouldClose(*window) && !should_close) {
     // Process all queued input events.
@@ -116,10 +123,29 @@ void Run(const std::filesystem::path& scene_path) {
     DrawSceneRadiance(*scene, camera, sun_shadow_map_targets, sun_cascades,
                       radiance_program, hdr_target);
 
+    Light default_sun;
+    default_sun.direction = Eigen::Vector3f(0.5f, -1.0f, 0.1f).normalized();
+    default_sun.color = Eigen::Vector3f(1.0f, 1.0f, 1.0f);
+    default_sun.intensity = 1.0f;
+    Light active_sun = sun_light.value_or(default_sun);
+
+    DrawSkyAnalytic(*scene, camera, active_sun, hdr_target, sky_program);
+
     // 3. Tonemapping (to default framebuffer)
     DrawTonemap(hdr_target, tonemap_program);
 
     glfwSwapBuffers(*window);
+
+    frame_count++;
+    if (frame_count % FLAGS_log_frame_time_interval == 0) {
+      double current_time = glfwGetTime();
+      double average_time_ms =
+          (current_time - last_time) * 1000.0 / FLAGS_log_frame_time_interval;
+      LOG(INFO) << "Average frame time over last "
+                << FLAGS_log_frame_time_interval
+                << " frames: " << average_time_ms << " ms";
+      last_time = current_time;
+    }
   }
 
   DestroyWindow(*window);

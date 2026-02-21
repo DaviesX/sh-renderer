@@ -5,6 +5,7 @@ layout(location = 0) out vec4 out_color;
 in vec3 v_world_pos;
 in vec3 v_normal;
 in vec2 v_uv;
+in vec2 v_lightmap_uv;
 in vec4 v_tangent;
 
 // Camera
@@ -32,9 +33,15 @@ layout(binding = 2) uniform sampler2D
     u_metallic_roughness_texture;  // B = Metal, G = Rough
 layout(binding = 3) uniform sampler2D u_emissive_texture;
 
+// Lightmaps
+layout(binding = 8) uniform sampler2D u_PackedTex0;
+layout(binding = 9) uniform sampler2D u_PackedTex1;
+layout(binding = 10) uniform sampler2D u_PackedTex2;
+
 uniform vec3 u_emissive_factor;
 uniform float u_emissive_strength;
 uniform int u_has_emissive_texture;
+uniform vec3 u_sky_color;
 
 const float PI = 3.14159265359;
 
@@ -48,6 +55,11 @@ struct ShadingAngles {
   float v_dot_h;
 };
 
+struct LightmapTexel {
+  vec3 sh_coeffs[9];
+  float visibility;
+};
+
 ShadingAngles ComputeShadingAngles(vec3 N, vec3 V, vec3 L, vec3 H) {
   ShadingAngles angles;
   angles.n_dot_l = max(dot(N, L), 0.0);
@@ -58,8 +70,13 @@ ShadingAngles ComputeShadingAngles(vec3 N, vec3 V, vec3 L, vec3 H) {
   return angles;
 }
 
-vec3 FresnelSchlick(ShadingAngles angles, vec3 F0) {
-  return F0 + (1.0 - F0) * pow(max(1.0 - angles.v_dot_h, 0.0), 5.0);
+vec3 FresnelSchlick(float v_dot_h, vec3 F0) {
+  return F0 + (1.0 - F0) * pow(max(1.0 - v_dot_h, 0.0), 5.0);
+}
+
+vec3 FresnelSchlickRoughness(float cos_theta, vec3 F0, float roughness) {
+  return F0 + (max(vec3(1.0 - roughness), F0) - F0) *
+                  pow(max(1.0 - cos_theta, 0.0), 5.0);
 }
 
 float DistributionGGX(ShadingAngles angles, float roughness) {
@@ -103,12 +120,9 @@ float DistributionDisney(ShadingAngles angles, float roughness) {
   return light_scatter * view_scatter;
 }
 
-vec3 ComputeBRDF(ShadingAngles angles, vec3 albedo, float metallic,
-                 float roughness, float occlusion) {
-  vec3 F0 = vec3(0.04);
-  F0 = mix(F0, albedo, metallic);
-
-  vec3 F = FresnelSchlick(angles, F0);
+vec3 ComputeDirectBRDF(ShadingAngles angles, vec3 f0, vec3 albedo,
+                       float metallic, float roughness, float occlusion) {
+  vec3 F = FresnelSchlick(angles.v_dot_h, f0);
   float NDF = DistributionGGX(angles, roughness);
   float G = GeometrySmith(angles, roughness);
 
@@ -119,6 +133,21 @@ vec3 ComputeBRDF(ShadingAngles angles, vec3 albedo, float metallic,
   vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
   float disney = DistributionDisney(angles, roughness);
   vec3 diffuse = kD * albedo / PI * disney;
+
+  // TODO: Fix the ORM textures so that they support occlusion.
+  // return occlusion * (diffuse + specular);
+  return (diffuse + specular);
+}
+
+vec3 ComputeIndirectBRDF(ShadingAngles angles, vec3 irradiance,
+                         vec3 reflection_radiance, vec3 f0, vec3 albedo,
+                         float metallic, float roughness, float occlusion) {
+  vec3 fresnel = FresnelSchlickRoughness(angles.n_dot_v, f0, roughness);
+
+  vec3 specular = fresnel * reflection_radiance;
+
+  vec3 kD = (vec3(1.0) - fresnel) * (1.0 - metallic);
+  vec3 diffuse = kD * albedo / PI * irradiance;
 
   // TODO: Fix the ORM textures so that they support occlusion.
   // return occlusion * (diffuse + specular);
@@ -183,6 +212,103 @@ float ComputeShadow(vec3 world_pos, vec3 normal, ShadingAngles angles) {
   return shadow;
 }
 
+// --- SH Irradiance ---
+vec3 EvalSHIrradiance(vec3 normal, vec3 sh_coeffs[9]) {
+  float x = normal.x;
+  float y = normal.y;
+  float z = normal.z;
+
+  // Constants pre-multiplied by A_l convolution factors
+  // Band 0: 0.282095 * 3.141593 = 0.886227
+  float c1 = 0.886227;
+
+  // Band 1: 0.488603 * 2.094395 = 1.023326
+  float c2 = 1.023326;
+
+  // Band 2: 1.092548 * 0.785398 = 0.858086
+  // Band 2: 0.315392 * 0.785398 = 0.247708
+  // Band 2: 0.546274 * 0.785398 = 0.429043
+  float c3 = 0.858086;
+  float c4 = 0.247708;
+  float c5 = 0.429043;
+
+  float b0 = c1;
+  float b1 = c2 * y;
+  float b2 = c2 * z;
+  float b3 = c2 * x;
+  float b4 = c3 * x * y;
+  float b5 = c3 * y * z;
+  float b6 = c4 * (3.0 * z * z - 1.0);
+  float b7 = c3 * x * z;
+  float b8 = c5 * (x * x - y * y);
+
+  vec3 result = sh_coeffs[0] * b0 + sh_coeffs[1] * b1 + sh_coeffs[2] * b2 +
+                sh_coeffs[3] * b3 + sh_coeffs[4] * b4 + sh_coeffs[5] * b5 +
+                sh_coeffs[6] * b6 + sh_coeffs[7] * b7 + sh_coeffs[8] * b8;
+
+  return max(result, 0.0);
+}
+
+// --- SH Radiance ---
+vec3 EvalSHRadiance(vec3 normal, vec3 sh_coeffs[9]) {
+  float x = normal.x;
+  float y = normal.y;
+  float z = normal.z;
+
+  float c1 = 0.282095;
+  float c2 = 0.488603;
+  float c3 = 1.092548;
+  float c4 = 0.315392;
+  float c5 = 0.546274;
+
+  float b0 = c1;
+  float b1 = c2 * y;
+  float b2 = c2 * z;
+  float b3 = c2 * x;
+  float b4 = c3 * x * y;
+  float b5 = c3 * y * z;
+  float b6 = c4 * (3.0 * z * z - 1.0);
+  float b7 = c3 * x * z;
+  float b8 = c5 * (x * x - y * y);
+
+  vec3 result = sh_coeffs[0] * b0 + sh_coeffs[1] * b1 + sh_coeffs[2] * b2 +
+                sh_coeffs[3] * b3 + sh_coeffs[4] * b4 + sh_coeffs[5] * b5 +
+                sh_coeffs[6] * b6 + sh_coeffs[7] * b7 + sh_coeffs[8] * b8;
+
+  return max(result, 0.0);
+}
+
+LightmapTexel GetLightmapTexel() {
+  vec4 p0 = texture(u_PackedTex0, v_lightmap_uv);
+  vec4 p1 = texture(u_PackedTex1, v_lightmap_uv);
+  vec4 p2 = texture(u_PackedTex2, v_lightmap_uv);
+
+  LightmapTexel texel;
+  texel.sh_coeffs[0] = p0.rgb;
+  texel.visibility = p0.a;
+
+  // Chroma reconstruction for higher bands
+  float L0_lum = dot(texel.sh_coeffs[0], vec3(0.2126, 0.7152, 0.0722));
+  vec3 chroma = vec3(1.0);
+  if (L0_lum > 1e-6) {
+    chroma = texel.sh_coeffs[0] / L0_lum;
+  }
+
+  // File 1: L1m1, L10, L11, L2m2
+  texel.sh_coeffs[1] = vec3(p1.r) * chroma;
+  texel.sh_coeffs[2] = vec3(p1.g) * chroma;
+  texel.sh_coeffs[3] = vec3(p1.b) * chroma;
+  texel.sh_coeffs[4] = vec3(p1.a) * chroma;
+
+  // File 2: L2m1, L20, L21, L22
+  texel.sh_coeffs[5] = vec3(p2.r) * chroma;
+  texel.sh_coeffs[6] = vec3(p2.g) * chroma;
+  texel.sh_coeffs[7] = vec3(p2.b) * chroma;
+  texel.sh_coeffs[8] = vec3(p2.a) * chroma;
+
+  return texel;
+}
+
 // ---------------------
 
 void main() {
@@ -217,19 +343,34 @@ void main() {
   vec3 light_dir =
       normalize(-u_sun.direction);  // Direction from surface to light
   vec3 half_dir = normalize(view_dir + light_dir);
+  vec3 reflection_dir = reflect(-view_dir, normal_world);
 
   ShadingAngles angles =
       ComputeShadingAngles(normal_world, view_dir, light_dir, half_dir);
 
   // Direct incoming radiance
-  float shadow = ComputeShadow(v_world_pos, normal_world, angles);
-  vec3 direct_radiance = u_sun.color * u_sun.intensity * shadow;
+  float sun_visibility = ComputeShadow(v_world_pos, normal_world, angles);
+  vec3 direct_radiance = u_sun.color * u_sun.intensity * sun_visibility;
 
-  // TODO: Add indirect lighting
+  // Specular color.
+  vec3 f0 = mix(vec3(0.04), albedo, metallic);
+
+  // Indirect lighting (SH)
+  LightmapTexel texel = GetLightmapTexel();
+  vec3 sh_irradiance = EvalSHIrradiance(normal_world, texel.sh_coeffs);
+  vec3 sky_emission = u_sky_color * u_sun.intensity / 10.f;
+  vec3 indirect_irradiance = sh_irradiance + sky_emission * texel.visibility;
+  vec3 indirect_reflection_radiance =
+      EvalSHRadiance(reflection_dir, texel.sh_coeffs);
+
+  vec3 l_indirect = ComputeIndirectBRDF(angles, indirect_irradiance,
+                                        indirect_reflection_radiance, f0,
+                                        albedo, metallic, roughness, occlusion);
 
   // PBR Calculation
-  vec3 brdf = ComputeBRDF(angles, albedo, metallic, roughness, occlusion);
-  vec3 l_direct = brdf * angles.n_dot_l * direct_radiance;
+  vec3 direct_brdf =
+      ComputeDirectBRDF(angles, f0, albedo, metallic, roughness, occlusion);
+  vec3 l_direct = direct_brdf * angles.n_dot_l * direct_radiance;
 
   // Emission
   vec3 l_emission = u_emissive_strength * u_emissive_factor;
@@ -237,6 +378,6 @@ void main() {
     l_emission *= texture(u_emissive_texture, v_uv).rgb;
   }
 
-  vec3 color = l_emission + l_direct;
+  vec3 color = l_emission + l_direct + l_indirect;
   out_color = vec4(color, 1.0);
 }
