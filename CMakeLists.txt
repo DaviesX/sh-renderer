@@ -71,6 +71,7 @@ set(LIB_SOURCES
     src/draw_depth.cpp
     src/draw_radiance.cpp
     src/draw_shadow_map.cpp
+    src/draw_sky.cpp
     src/draw_tonemap.cpp
     src/glad.c
     src/input.cpp
@@ -89,6 +90,7 @@ set(LIB_HEADERS
     src/draw_depth.h
     src/draw_radiance.h
     src/draw_shadow_map.h
+    src/draw_sky.h
     src/glad.h
     src/input.h
     src/interaction.h

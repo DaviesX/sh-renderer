@@ -41,6 +41,7 @@ layout(binding = 10) uniform sampler2D u_PackedTex2;
 uniform vec3 u_emissive_factor;
 uniform float u_emissive_strength;
 uniform int u_has_emissive_texture;
+uniform vec3 u_sky_color;
 
 const float PI = 3.14159265359;
 
@@ -357,7 +358,7 @@ void main() {
   // Indirect lighting (SH)
   LightmapTexel texel = GetLightmapTexel();
   vec3 sh_irradiance = EvalSHIrradiance(normal_world, texel.sh_coeffs);
-  vec3 sky_emission = vec3(0.2, 0.5, 0.9);
+  vec3 sky_emission = u_sky_color * u_sun.intensity / 10.f;
   vec3 indirect_irradiance = sh_irradiance + sky_emission * texel.visibility;
   vec3 indirect_reflection_radiance =
       EvalSHRadiance(reflection_dir, texel.sh_coeffs);

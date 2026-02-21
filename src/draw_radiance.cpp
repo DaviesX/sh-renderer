@@ -3,6 +3,7 @@
 #include <glog/logging.h>
 
 #include "cascade.h"
+#include "draw_sky.h"
 #include "glad.h"
 #include "shader.h"
 
@@ -90,6 +91,8 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
     program.Uniform("u_sun.color", Eigen::Vector3f(1.0f, 1.0f, 1.0f));
     program.Uniform("u_sun.intensity", 1.0f);
   }
+
+  program.Uniform("u_sky_color", kSkyColor);
 
   // Bind Lightmap Textures
   if (scene.lightmaps_packed[0].texture_id != 0) {

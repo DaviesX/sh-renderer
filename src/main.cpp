@@ -7,6 +7,7 @@
 #include "draw_depth.h"
 #include "draw_radiance.h"
 #include "draw_shadow_map.h"
+#include "draw_sky.h"
 #include "draw_tonemap.h"
 #include "input.h"
 #include "interaction.h"
@@ -52,10 +53,11 @@ void Run(const std::filesystem::path& scene_path) {
   ShaderProgram depth_vis_program = CreateDepthVisualizerProgram();
   ShaderProgram shadow_vis_program = CreateShadowMapVisualizationProgram();
   ShaderProgram radiance_program = CreateRadianceProgram();
+  ShaderProgram sky_program = CreateSkyAnalyticProgram();
   ShaderProgram tonemap_program = CreateTonemapProgram();
 
   if (!depth_program || !depth_vis_program || !radiance_program ||
-      !tonemap_program) {
+      !sky_program || !tonemap_program) {
     LOG(ERROR) << "Failed to create shader programs.";
     return;
   }
@@ -120,6 +122,14 @@ void Run(const std::filesystem::path& scene_path) {
     // DrawRadiance will handle clearing color, setting LEQUAL, etc.
     DrawSceneRadiance(*scene, camera, sun_shadow_map_targets, sun_cascades,
                       radiance_program, hdr_target);
+
+    Light default_sun;
+    default_sun.direction = Eigen::Vector3f(0.5f, -1.0f, 0.1f).normalized();
+    default_sun.color = Eigen::Vector3f(1.0f, 1.0f, 1.0f);
+    default_sun.intensity = 1.0f;
+    Light active_sun = sun_light.value_or(default_sun);
+
+    DrawSkyAnalytic(*scene, camera, active_sun, hdr_target, sky_program);
 
     // 3. Tonemapping (to default framebuffer)
     DrawTonemap(hdr_target, tonemap_program);
