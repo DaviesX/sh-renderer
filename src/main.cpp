@@ -19,6 +19,8 @@ DEFINE_string(input, "", "Path to the glTF scene file to render.");
 DEFINE_uint32(width, 1280, "Width of the window.");
 DEFINE_uint32(height, 720, "Height of the window.");
 DEFINE_uint32(msaa_samples, 0, "Number of MSAA samples.");
+DEFINE_uint32(log_frame_time_interval, 100,
+              "Log average frame time every N frames.");
 
 namespace sh_renderer {
 
@@ -68,6 +70,9 @@ void Run(const std::filesystem::path& scene_path) {
   InputState input_state;
   InteractionState interaction_state;
   bool should_close = false;
+
+  uint32_t frame_count = 0;
+  double last_time = glfwGetTime();
 
   while (!glfwWindowShouldClose(*window) && !should_close) {
     // Process all queued input events.
@@ -120,6 +125,17 @@ void Run(const std::filesystem::path& scene_path) {
     DrawTonemap(hdr_target, tonemap_program);
 
     glfwSwapBuffers(*window);
+
+    frame_count++;
+    if (frame_count % FLAGS_log_frame_time_interval == 0) {
+      double current_time = glfwGetTime();
+      double average_time_ms =
+          (current_time - last_time) * 1000.0 / FLAGS_log_frame_time_interval;
+      LOG(INFO) << "Average frame time over last "
+                << FLAGS_log_frame_time_interval
+                << " frames: " << average_time_ms << " ms";
+      last_time = current_time;
+    }
   }
 
   DestroyWindow(*window);
