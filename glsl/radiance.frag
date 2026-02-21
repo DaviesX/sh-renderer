@@ -162,14 +162,10 @@ float ComputeShadow(vec3 world_pos, vec3 normal, ShadingAngles angles) {
   vec4 viewPos = u_view * vec4(world_pos, 1.0);
   float viewDepth = abs(viewPos.z);
 
-  int layer = -1;
-  for (int i = 0; i < NUM_CASCADES; ++i) {
-    if (viewDepth < u_sun_cascade_splits[i]) {
-      layer = i;
-      break;
-    }
+  int layer = 0;
+  for (int i = 0; i < NUM_CASCADES - 1; ++i) {
+    layer += int(viewDepth >= u_sun_cascade_splits[i]);
   }
-  if (layer == -1) layer = NUM_CASCADES - 1;
 
   const float normal_bias_scale = 0.05;
   vec3 biased_world_pos =
