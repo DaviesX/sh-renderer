@@ -132,4 +132,7 @@ std::vector<Eigen::Vector4f> TransformedTangents(const Geometry& geometry);
 // Returns the surface area of the geometry.
 float SurfaceArea(const Geometry& geometry);
 
+// Returns the sun light if it exists.
+std::optional<Light> FindSunLight(const Scene& scene);
+
 }  // namespace sh_renderer

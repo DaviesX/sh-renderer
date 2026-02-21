@@ -6,6 +6,7 @@
 
 #include "draw_depth.h"
 #include "draw_radiance.h"
+#include "draw_shadow_map.h"
 #include "draw_tonemap.h"
 #include "input.h"
 #include "interaction.h"
@@ -44,8 +45,10 @@ void Run(const std::filesystem::path& scene_path) {
 
   UploadSceneToGPU(*scene);
 
+  ShaderProgram cascaded_shadow_map_program = CreateShadowMapProgram();
   ShaderProgram depth_program = CreateDepthProgram();
   ShaderProgram depth_vis_program = CreateDepthVisualizerProgram();
+  ShaderProgram shadow_vis_program = CreateShadowMapVisualizationProgram();
   ShaderProgram radiance_program = CreateRadianceProgram();
   ShaderProgram tonemap_program = CreateTonemapProgram();
 
@@ -59,6 +62,8 @@ void Run(const std::filesystem::path& scene_path) {
   int initial_width, initial_height;
   glfwGetFramebufferSize(*window, &initial_width, &initial_height);
   RenderTarget hdr_target = CreateHDRTarget(initial_width, initial_height);
+  std::vector<RenderTarget> sun_shadow_map_targets =
+      CreateCascadedShadowMapTargets();
 
   InputState input_state;
   InteractionState interaction_state;
@@ -94,13 +99,22 @@ void Run(const std::filesystem::path& scene_path) {
     glClear(GL_DEPTH_BUFFER_BIT);  // Clear depth only
     glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
+    std::vector<Cascade> sun_cascades;
+    std::optional<Light> sun_light = FindSunLight(*scene);
+    if (sun_light) {
+      sun_cascades = ComputeCascades(*sun_light, camera);
+    }
+    DrawCascadedShadowMap(*scene, camera, cascaded_shadow_map_program,
+                          sun_cascades, sun_shadow_map_targets);
+
     DrawDepth(*scene, camera, depth_program, hdr_target);
 
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
     // 2. Radiance Pass (Forward PBR)
     // DrawRadiance will handle clearing color, setting LEQUAL, etc.
-    DrawSceneRadiance(*scene, camera, radiance_program, hdr_target);
+    DrawSceneRadiance(*scene, camera, sun_shadow_map_targets, sun_cascades,
+                      radiance_program, hdr_target);
 
     // 3. Tonemapping (to default framebuffer)
     DrawTonemap(hdr_target, tonemap_program);
@@ -114,6 +128,10 @@ void Run(const std::filesystem::path& scene_path) {
   glDeleteFramebuffers(1, &hdr_target.fbo);
   glDeleteTextures(1, &hdr_target.texture);
   glDeleteTextures(1, &hdr_target.depth_buffer);
+  for (const auto& target : sun_shadow_map_targets) {
+    glDeleteFramebuffers(1, &target.fbo);
+    glDeleteTextures(1, &target.depth_buffer);
+  }
 }
 
 }  // namespace sh_renderer

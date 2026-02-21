@@ -95,7 +95,7 @@ std::optional<Window> CreateWindow(unsigned width, unsigned height,
   glfwMakeContextCurrent(window);
 
   // Initialize GLAD for OpenGL function loading.
-  if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+  if (!gladLoaderLoadGL()) {
     LOG(ERROR) << "Failed to initialize GLAD.";
     glfwDestroyWindow(window);
     glfwTerminate();

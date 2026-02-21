@@ -2,6 +2,7 @@
 
 #include <glog/logging.h>
 
+#include "cascade.h"
 #include "glad.h"
 #include "shader.h"
 
@@ -25,24 +26,44 @@ ShaderProgram CreateRadianceProgram() {
 }
 
 void DrawSceneRadiance(const Scene& scene, const Camera& camera,
+                       const std::vector<RenderTarget>& sun_shadow_maps,
+                       const std::vector<Cascade>& sun_cascades,
                        const ShaderProgram& program,
                        const RenderTarget& hdr_target) {
   if (!program) return;
+  program.Use();
 
-  // Bind FBO and resize if needed (though resize is handled in main loop
-  // mostly)
+  // Bind Sun Shadow Maps and set uniforms
+  if (!sun_cascades.empty() && !sun_shadow_maps.empty()) {
+    for (size_t i = 0; i < sun_cascades.size(); ++i) {
+      if (i >= 3) break;  // Hardcoded limit in shader
+
+      // Bind texture unit 5 + i
+      glBindTextureUnit(5 + i, sun_shadow_maps[i].depth_buffer);
+
+      // Set uniforms
+      std::string base = "u_sun_cascade_splits[" + std::to_string(i) + "]";
+      program.Uniform(base, sun_cascades[i].split_depth);
+
+      base = "u_sun_cascade_view_projections[" + std::to_string(i) + "]";
+      program.Uniform(base, sun_cascades[i].view_projection_matrix);
+    }
+  }
+
+  // Bind FBO
   glBindFramebuffer(GL_FRAMEBUFFER, hdr_target.fbo);
   glViewport(0, 0, hdr_target.width, hdr_target.height);
 
   // Clear Color (Radiance) but KEEP Depth (from pre-pass)
-  // We assume the caller has already populated the depth buffer.
-  glClearColor(0.0f, 0.0f, 0.0f,
-               0.0f);  // Clear HDR target to black/transparent
+  glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
   glClear(GL_COLOR_BUFFER_BIT);
 
   // Z-Prepass State
   glDepthFunc(GL_LEQUAL);
-  glDepthMask(GL_FALSE);  // Don't write depth, it's already there
+  glDepthMask(GL_FALSE);
+
+  // Set u_view matrix for shadow selection
+  program.Uniform("u_view", GetViewMatrix(camera));
 
   program.Use();
   program.Uniform("u_view_proj", GetViewProjMatrix(camera));
