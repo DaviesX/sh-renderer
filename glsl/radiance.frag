@@ -196,7 +196,7 @@ float ComputeShadow(vec3 world_pos, vec3 normal, ShadingAngles angles) {
     layer += int(viewDepth >= u_sun_cascade_splits[i]);
   }
 
-  const float normal_bias_scale = 0.05;
+  const float normal_bias_scale = 0.1;
   vec3 biased_world_pos =
       world_pos + normal * (1.0 - angles.n_dot_l) * normal_bias_scale;
   vec4 frag_pos_light_space =
@@ -206,8 +206,8 @@ float ComputeShadow(vec3 world_pos, vec3 normal, ShadingAngles angles) {
 
   float texel_size = 1.0 / float(textureSize(u_sun_shadow_maps[layer], 0).x);
   vec3 compare_coord = vec3(proj_coords.xy, proj_coords.z);
-  float shadow =
-      PCFPoissonDisk9(u_sun_shadow_maps[layer], compare_coord, texel_size, 2.0);
+  float shadow = PCFPoissonDisk9(u_sun_shadow_maps[layer], compare_coord,
+                                 texel_size, 1.5 / float(layer + 1));
 
   return shadow;
 }
@@ -352,8 +352,7 @@ void main() {
       ComputeShadingAngles(normal_world, view_dir, light_dir, half_dir);
 
   // Direct incoming radiance
-  float sun_visibility =
-      ComputeShadow(v_world_pos, interpolated_normal, angles);
+  float sun_visibility = ComputeShadow(v_world_pos, normal_world, angles);
   vec3 direct_radiance = u_sun.color * u_sun.intensity * sun_visibility;
 
   // Specular color.
