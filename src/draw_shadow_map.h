@@ -8,8 +8,11 @@
 
 namespace sh_renderer {
 
-// Creates a shadow map shader program.
-ShaderProgram CreateShadowMapProgram();
+// Creates a shadow map shader program for opaque objects.
+ShaderProgram CreateShadowMapOpaqueProgram();
+
+// Creates a shadow map shader program for cutout objects.
+ShaderProgram CreateShadowMapCutoutProgram();
 
 // Creates cascaded shadow map targets.
 std::vector<RenderTarget> CreateCascadedShadowMapTargets();
@@ -17,7 +20,8 @@ std::vector<RenderTarget> CreateCascadedShadowMapTargets();
 // Draws the cascaded shadow maps in the sun light's perspective over the
 // camera's view frustum.
 void DrawCascadedShadowMap(const Scene& scene, const Camera& camera,
-                           const ShaderProgram& program,
+                           const ShaderProgram& opaque_program,
+                           const ShaderProgram& cutout_program,
                            const std::vector<Cascade>& cascades,
                            const std::vector<RenderTarget>& shadow_map_targets);
 

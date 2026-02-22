@@ -7,15 +7,19 @@
 
 namespace sh_renderer {
 
-// Creates the depth pre-pass shader program.
-ShaderProgram CreateDepthProgram();
+// Creates the depth pre-pass shader program for opaque materials.
+ShaderProgram CreateDepthOpaqueProgram();
+
+// Creates the depth pre-pass shader program for cutout materials.
+ShaderProgram CreateDepthCutoutProgram();
 
 // Creates the depth visualization shader program.
 ShaderProgram CreateDepthVisualizerProgram();
 
 // Draws the scene to the depth buffer.
 void DrawDepth(const Scene& scene, const Camera& camera,
-               const ShaderProgram& program, const RenderTarget& target);
+               const ShaderProgram& opaque_program,
+               const ShaderProgram& cutout_program, const RenderTarget& target);
 
 // Draws the depth buffer to the output target (or screen) for visualization.
 void DrawDepthVisualization(const RenderTarget& depth, const Camera& camera,

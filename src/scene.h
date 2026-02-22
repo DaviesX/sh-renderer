@@ -66,6 +66,9 @@ struct Material {
   Eigen::Vector3f emissive_factor = Eigen::Vector3f::Zero();
   float emissive_strength = 0.f;
   std::optional<Texture> emissive_texture;
+
+  // Alpha Cutout.
+  bool alpha_cutout = false;
 };
 
 // --- Geometry ---
