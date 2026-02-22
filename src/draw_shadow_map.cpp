@@ -12,8 +12,8 @@
 namespace sh_renderer {
 
 ShaderProgram CreateShadowMapOpaqueProgram() {
-  auto program =
-      ShaderProgram::CreateGraphics("glsl/shadow.vert", "glsl/shadow.frag");
+  auto program = ShaderProgram::CreateGraphics("glsl/depth_opaque.vert",
+                                               "glsl/depth_opaque.frag");
   if (!program) {
     LOG(ERROR) << "Failed to create opaque shadow map program.";
     return {};
@@ -98,12 +98,7 @@ void DrawCascadedShadowMap(
   glDepthFunc(GL_LEQUAL);
   // Disable Color mask
   glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-  // Important: Face culling. Standard for shadows is often Front Face culling
-  // to solve peter-panning, or standard Back Face with bias. Use Back Face
-  // culling (default) with bias, or Front Face. Front Face culling is robust
-  // for closed meshes.
   glEnable(GL_CULL_FACE);
-  glCullFace(GL_FRONT);
 
   std::vector<const Geometry*> opaque_geos;
   std::vector<const Geometry*> cutout_geos;
@@ -133,9 +128,9 @@ void DrawCascadedShadowMap(
     glViewport(0, 0, target.width, target.height);
     glClear(GL_DEPTH_BUFFER_BIT);
 
+    glCullFace(GL_FRONT);
     opaque_program.Use();
-    opaque_program.Uniform("u_view_projection_matrix",
-                           cascade.view_projection_matrix);
+    opaque_program.Uniform("u_view_proj", cascade.view_projection_matrix);
     for (const Geometry* geo_ptr : opaque_geos) {
       const Geometry& geo = *geo_ptr;
       opaque_program.Uniform("u_model", geo.transform.matrix());
@@ -147,6 +142,7 @@ void DrawCascadedShadowMap(
       }
     }
 
+    glCullFace(GL_BACK);
     cutout_program.Use();
     cutout_program.Uniform("u_view_proj", cascade.view_projection_matrix);
     for (const Geometry* geo_ptr : cutout_geos) {
@@ -172,6 +168,7 @@ void DrawCascadedShadowMap(
   }
 
   // Restore state
+  glEnable(GL_CULL_FACE);
   glCullFace(GL_BACK);
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);

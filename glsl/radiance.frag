@@ -196,7 +196,7 @@ float ComputeShadow(vec3 world_pos, vec3 normal, ShadingAngles angles) {
     layer += int(viewDepth >= u_sun_cascade_splits[i]);
   }
 
-  const float normal_bias_scale = 0.1;
+  const float normal_bias_scale = 0.02;
   vec3 biased_world_pos =
       world_pos + normal * (1.0 - angles.n_dot_l) * normal_bias_scale;
   vec4 frag_pos_light_space =
