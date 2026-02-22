@@ -11,11 +11,21 @@
 
 namespace sh_renderer {
 
-ShaderProgram CreateShadowMapProgram() {
+ShaderProgram CreateShadowMapOpaqueProgram() {
   auto program =
       ShaderProgram::CreateGraphics("glsl/shadow.vert", "glsl/shadow.frag");
   if (!program) {
-    LOG(ERROR) << "Failed to create shadow map program.";
+    LOG(ERROR) << "Failed to create opaque shadow map program.";
+    return {};
+  }
+  return std::move(*program);
+}
+
+ShaderProgram CreateShadowMapCutoutProgram() {
+  auto program = ShaderProgram::CreateGraphics("glsl/depth_cutout.vert",
+                                               "glsl/depth_cutout.frag");
+  if (!program) {
+    LOG(ERROR) << "Failed to create cutout shadow map program.";
     return {};
   }
   return std::move(*program);
@@ -71,20 +81,16 @@ std::vector<RenderTarget> CreateCascadedShadowMapTargets() {
 }
 
 void DrawCascadedShadowMap(
-    const Scene& scene, const Camera& camera, const ShaderProgram& program,
+    const Scene& scene, const Camera& camera,
+    const ShaderProgram& opaque_program, const ShaderProgram& cutout_program,
     const std::vector<Cascade>& cascades,
     const std::vector<RenderTarget>& shadow_map_targets) {
-  if (!program) return;
+  if (!opaque_program || !cutout_program) return;
   if (cascades.size() != shadow_map_targets.size()) {
     LOG_EVERY_N(ERROR, 100)
         << "Mismatch between cascades and shadow map targets size.";
     return;
   }
-
-  program.Use();
-
-  // We need to render the scene into each cascade shadow map.
-  // Optimization: We could cull objects per cascade, but for now draw all.
 
   // Enable Depth Test
   glEnable(GL_DEPTH_TEST);
@@ -99,6 +105,26 @@ void DrawCascadedShadowMap(
   glEnable(GL_CULL_FACE);
   glCullFace(GL_FRONT);
 
+  std::vector<const Geometry*> opaque_geos;
+  std::vector<const Geometry*> cutout_geos;
+  opaque_geos.reserve(scene.geometries.size());
+  cutout_geos.reserve(scene.geometries.size());
+
+  for (const auto& geo : scene.geometries) {
+    if (geo.vao == 0) continue;
+    if (geo.material_id >= 0 &&
+        static_cast<size_t>(geo.material_id) < scene.materials.size()) {
+      const auto& mat = scene.materials[geo.material_id];
+      if (mat.alpha_cutout) {
+        cutout_geos.push_back(&geo);
+      } else {
+        opaque_geos.push_back(&geo);
+      }
+    } else {
+      opaque_geos.push_back(&geo);
+    }
+  }
+
   for (size_t i = 0; i < cascades.size(); ++i) {
     const auto& cascade = cascades[i];
     const auto& target = shadow_map_targets[i];
@@ -107,12 +133,34 @@ void DrawCascadedShadowMap(
     glViewport(0, 0, target.width, target.height);
     glClear(GL_DEPTH_BUFFER_BIT);
 
-    program.Uniform("u_view_projection_matrix", cascade.view_projection_matrix);
+    opaque_program.Use();
+    opaque_program.Uniform("u_view_projection_matrix",
+                           cascade.view_projection_matrix);
+    for (const Geometry* geo_ptr : opaque_geos) {
+      const Geometry& geo = *geo_ptr;
+      opaque_program.Uniform("u_model", geo.transform.matrix());
+      glBindVertexArray(geo.vao);
+      if (geo.index_count > 0) {
+        glDrawElements(GL_TRIANGLES, geo.index_count, GL_UNSIGNED_INT, nullptr);
+      } else {
+        glDrawArrays(GL_TRIANGLES, 0, geo.vertices.size());
+      }
+    }
 
-    for (const auto& geo : scene.geometries) {
-      if (geo.vao == 0) continue;
+    cutout_program.Use();
+    cutout_program.Uniform("u_view_proj", cascade.view_projection_matrix);
+    for (const Geometry* geo_ptr : cutout_geos) {
+      const Geometry& geo = *geo_ptr;
+      cutout_program.Uniform("u_model", geo.transform.matrix());
 
-      program.Uniform("u_model", geo.transform.matrix());
+      if (geo.material_id >= 0 &&
+          static_cast<size_t>(geo.material_id) < scene.materials.size()) {
+        const auto& mat = scene.materials[geo.material_id];
+        glBindTextureUnit(0, mat.albedo.texture_id);
+      } else {
+        glBindTextureUnit(0, 0);
+      }
+
       glBindVertexArray(geo.vao);
 
       if (geo.index_count > 0) {

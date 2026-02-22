@@ -107,6 +107,8 @@ void DrawDepth(const Scene& scene, const Camera& camera,
       } else {
         opaque_geos.push_back(&geo);
       }
+    } else {
+      opaque_geos.push_back(&geo);
     }
   }
 
