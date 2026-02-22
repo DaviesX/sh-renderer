@@ -317,7 +317,10 @@ void main() {
   vec3 albedo = albedo_sample.rgb;
   float alpha = albedo_sample.a;
 
-  if (alpha < 0.5) discard;
+  if (alpha < 0.5) {
+    // Cutout transparency.
+    discard;
+  }
 
   vec4 mr_sample = texture(u_metallic_roughness_texture, v_uv);
   float metallic = mr_sample.b;
@@ -349,7 +352,8 @@ void main() {
       ComputeShadingAngles(normal_world, view_dir, light_dir, half_dir);
 
   // Direct incoming radiance
-  float sun_visibility = ComputeShadow(v_world_pos, normal_world, angles);
+  float sun_visibility =
+      ComputeShadow(v_world_pos, interpolated_normal, angles);
   vec3 direct_radiance = u_sun.color * u_sun.intensity * sun_visibility;
 
   // Specular color.

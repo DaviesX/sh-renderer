@@ -49,15 +49,17 @@ void Run(const std::filesystem::path& scene_path) {
   UploadSceneToGPU(*scene);
 
   ShaderProgram cascaded_shadow_map_program = CreateShadowMapProgram();
-  ShaderProgram depth_program = CreateDepthProgram();
+  ShaderProgram depth_opaque_program = CreateDepthOpaqueProgram();
+  ShaderProgram depth_cutout_program = CreateDepthCutoutProgram();
   ShaderProgram depth_vis_program = CreateDepthVisualizerProgram();
   ShaderProgram shadow_vis_program = CreateShadowMapVisualizationProgram();
   ShaderProgram radiance_program = CreateRadianceProgram();
   ShaderProgram sky_program = CreateSkyAnalyticProgram();
   ShaderProgram tonemap_program = CreateTonemapProgram();
 
-  if (!depth_program || !depth_vis_program || !radiance_program ||
-      !sky_program || !tonemap_program) {
+  if (!cascaded_shadow_map_program || !depth_opaque_program ||
+      !depth_cutout_program || !depth_vis_program || !shadow_vis_program ||
+      !radiance_program || !sky_program || !tonemap_program) {
     LOG(ERROR) << "Failed to create shader programs.";
     return;
   }
@@ -114,7 +116,8 @@ void Run(const std::filesystem::path& scene_path) {
     DrawCascadedShadowMap(*scene, camera, cascaded_shadow_map_program,
                           sun_cascades, sun_shadow_map_targets);
 
-    DrawDepth(*scene, camera, depth_program, hdr_target);
+    DrawDepth(*scene, camera, depth_opaque_program, depth_cutout_program,
+              hdr_target);
 
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 

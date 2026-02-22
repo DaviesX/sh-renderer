@@ -17,6 +17,21 @@ namespace {
 
 const float kLightIntensityScale = 1 / 200.f;
 
+bool AnyTransparentPixel(const std::vector<uint8_t>& pixel_data) {
+  if (pixel_data.empty()) {
+    return false;
+  }
+  if (pixel_data.size() % 4 != 0) {
+    return false;
+  }
+  for (size_t i = 0; i < pixel_data.size(); i += 4) {
+    if (pixel_data[i + 3] < 255) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Helper to convert array to Eigen matrix/vector
 Eigen::Affine3f NodeToTransform(const tinygltf::Node& node) {
   Eigen::Affine3f transform = Eigen::Affine3f::Identity();
@@ -316,23 +331,41 @@ std::string UrlDecode(const std::string& str) {
 void LoadTexture(const tinygltf::Model& model, int tex_idx,
                  const std::filesystem::path& base_path, Texture* out_tex,
                  bool srgb = true) {
-  if (tex_idx >= 0 && tex_idx < model.textures.size()) {
-    int img_idx = model.textures[tex_idx].source;
-    if (img_idx >= 0 && img_idx < model.images.size()) {
-      const auto& img = model.images[img_idx];
-      out_tex->width = img.width;
-      out_tex->height = img.height;
-      out_tex->channels = img.component;
-      out_tex->pixel_data = img.image;  // Copy data
-      if (!img.uri.empty()) {
-        std::filesystem::path uri_path(UrlDecode(img.uri));
-        if (uri_path.is_absolute()) {
-          out_tex->file_path = uri_path;
-        } else {
-          out_tex->file_path = std::filesystem::absolute(base_path / uri_path);
-        }
-      }
-      return;
+  if (tex_idx < 0 || tex_idx >= model.textures.size()) {
+    return;
+  }
+
+  int img_idx = model.textures[tex_idx].source;
+  if (img_idx < 0 || img_idx >= model.images.size()) {
+    return;
+  }
+
+  const auto& img = model.images[img_idx];
+  out_tex->width = img.width;
+  out_tex->height = img.height;
+
+  if (srgb && img.component == 4 && !AnyTransparentPixel(img.image)) {
+    // Resize to 3 channels
+    std::vector<uint8_t> rgb_data;
+    rgb_data.reserve(img.width * img.height * 3);
+    for (size_t i = 0; i < img.image.size(); i += 4) {
+      rgb_data.push_back(img.image[i]);
+      rgb_data.push_back(img.image[i + 1]);
+      rgb_data.push_back(img.image[i + 2]);
+    }
+    out_tex->pixel_data = std::move(rgb_data);
+    out_tex->channels = 3;
+  } else {
+    out_tex->pixel_data = img.image;
+    out_tex->channels = img.component;
+  }
+
+  if (!img.uri.empty()) {
+    std::filesystem::path uri_path(UrlDecode(img.uri));
+    if (uri_path.is_absolute()) {
+      out_tex->file_path = uri_path;
+    } else {
+      out_tex->file_path = std::filesystem::absolute(base_path / uri_path);
     }
   }
 }
@@ -397,6 +430,7 @@ void ProcessMaterials(const tinygltf::Model& model,
     // Texture (Base Color)
     int albedo_idx = gltf_mat.pbrMetallicRoughness.baseColorTexture.index;
     LoadTexture(model, albedo_idx, base_path, &mat.albedo, true);
+    mat.alpha_cutout = mat.albedo.channels == 4;
 
     if (mat.albedo.pixel_data.empty()) {
       // Create 1x1 texture from baseColorFactor (Linear -> sRGB)

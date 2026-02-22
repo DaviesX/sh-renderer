@@ -42,9 +42,19 @@ GLuint GetQuadVAO() {
 
 }  // namespace
 
-ShaderProgram CreateDepthProgram() {
-  auto program =
-      ShaderProgram::CreateGraphics("glsl/depth.vert", "glsl/depth.frag");
+ShaderProgram CreateDepthOpaqueProgram() {
+  auto program = ShaderProgram::CreateGraphics("glsl/depth_opaque.vert",
+                                               "glsl/depth_opaque.frag");
+  if (!program) {
+    LOG(ERROR) << "Failed to create depth shader program.";
+    return {};
+  }
+  return std::move(*program);
+}
+
+ShaderProgram CreateDepthCutoutProgram() {
+  auto program = ShaderProgram::CreateGraphics("glsl/depth_cutout.vert",
+                                               "glsl/depth_cutout.frag");
   if (!program) {
     LOG(ERROR) << "Failed to create depth shader program.";
     return {};
@@ -63,8 +73,10 @@ ShaderProgram CreateDepthVisualizerProgram() {
 }
 
 void DrawDepth(const Scene& scene, const Camera& camera,
-               const ShaderProgram& program, const RenderTarget& target) {
-  if (!program) return;
+               const ShaderProgram& opaque_program,
+               const ShaderProgram& cutout_program,
+               const RenderTarget& target) {
+  if (!opaque_program || !cutout_program) return;
 
   // Bind FBO
   glBindFramebuffer(GL_FRAMEBUFFER, target.fbo);
@@ -79,19 +91,57 @@ void DrawDepth(const Scene& scene, const Camera& camera,
   // Enable Depth Test
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LESS);
-  // Note: User rule mentions glDepthFunc(GL_LEQUAL) for Forward passes.
-  // For depth pre-pass, LESS is fine, but LEQUAL is also fine if we clear
-  // to 1.0. We should probably enable LEQUAL globally later. Let's stick to
-  // LESS for pre-pass or LEQUAL to be safe.
-  glDepthFunc(GL_LEQUAL);
 
-  program.Use();
-  program.Uniform("u_view_proj", GetViewProjMatrix(camera));
+  std::vector<const Geometry*> opaque_geos;
+  std::vector<const Geometry*> cutout_geos;
+  opaque_geos.reserve(scene.geometries.size());
+  cutout_geos.reserve(scene.geometries.size());
 
   for (const auto& geo : scene.geometries) {
     if (geo.vao == 0) continue;
+    if (geo.material_id >= 0 &&
+        static_cast<size_t>(geo.material_id) < scene.materials.size()) {
+      const auto& mat = scene.materials[geo.material_id];
+      if (mat.alpha_cutout) {
+        cutout_geos.push_back(&geo);
+      } else {
+        opaque_geos.push_back(&geo);
+      }
+    }
+  }
 
-    program.Uniform("u_model", geo.transform.matrix());
+  // Draw the opaque geometries.
+  opaque_program.Use();
+  opaque_program.Uniform("u_view_proj", GetViewProjMatrix(camera));
+
+  for (const Geometry* geo_ptr : opaque_geos) {
+    const Geometry& geo = *geo_ptr;
+    opaque_program.Uniform("u_model", geo.transform.matrix());
+
+    glBindVertexArray(geo.vao);
+    if (geo.index_count > 0) {
+      glDrawElements(GL_TRIANGLES, geo.index_count, GL_UNSIGNED_INT, nullptr);
+    } else {
+      glDrawArrays(GL_TRIANGLES, 0, geo.vertices.size());
+    }
+  }
+
+  // Draw the cutout geometries.
+  cutout_program.Use();
+  cutout_program.Uniform("u_view_proj", GetViewProjMatrix(camera));
+
+  for (const Geometry* geo_ptr : cutout_geos) {
+    const Geometry& geo = *geo_ptr;
+    cutout_program.Uniform("u_model", geo.transform.matrix());
+
+    // For cutout transparency, we need to bind the albedo texture.
+    if (geo.material_id >= 0 &&
+        static_cast<size_t>(geo.material_id) < scene.materials.size()) {
+      const auto& mat = scene.materials[geo.material_id];
+      glBindTextureUnit(0, mat.albedo.texture_id);
+    } else {
+      glBindTextureUnit(0, 0);
+    }
 
     glBindVertexArray(geo.vao);
     if (geo.index_count > 0) {
@@ -103,6 +153,7 @@ void DrawDepth(const Scene& scene, const Camera& camera,
 
   // Restore State
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+  glDepthFunc(GL_LEQUAL);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
