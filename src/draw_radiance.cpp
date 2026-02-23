@@ -72,13 +72,7 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
 
   // Sun Light (Hardcoded for now as per instructions usually, but we have a
   // scene light?) Finding the first directional light in the scene for now.
-  const Light* sun = nullptr;
-  for (const auto& light : scene.lights) {
-    if (light.type == Light::Type::Directional) {
-      sun = &light;
-      break;
-    }
-  }
+  const SunLight* sun = scene.sun_light ? &(*scene.sun_light) : nullptr;
 
   if (sun) {
     program.Uniform("u_sun.direction", sun->direction);

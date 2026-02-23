@@ -113,9 +113,8 @@ void Run(const std::filesystem::path& scene_path) {
     glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
     std::vector<Cascade> sun_cascades;
-    std::optional<Light> sun_light = FindSunLight(*scene);
-    if (sun_light) {
-      sun_cascades = ComputeCascades(*sun_light, camera);
+    if (scene->sun_light) {
+      sun_cascades = ComputeCascades(*(scene->sun_light), camera);
     }
     DrawCascadedShadowMap(*scene, camera, cascaded_shadow_map_opaque_program,
                           cascaded_shadow_map_cutout_program, sun_cascades,
@@ -131,11 +130,11 @@ void Run(const std::filesystem::path& scene_path) {
     DrawSceneRadiance(*scene, camera, sun_shadow_map_targets, sun_cascades,
                       radiance_program, hdr_target);
 
-    Light default_sun;
+    SunLight default_sun;
     default_sun.direction = Eigen::Vector3f(0.5f, -1.0f, 0.1f).normalized();
     default_sun.color = Eigen::Vector3f(1.0f, 1.0f, 1.0f);
     default_sun.intensity = 1.0f;
-    Light active_sun = sun_light.value_or(default_sun);
+    SunLight active_sun = scene->sun_light.value_or(default_sun);
 
     DrawSkyAnalytic(*scene, camera, active_sun, hdr_target, sky_program);
 

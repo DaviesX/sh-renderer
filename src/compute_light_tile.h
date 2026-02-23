@@ -13,8 +13,6 @@ namespace sh_renderer {
 
 SSBO CreateLightTileListSSBO(uint32_t width, uint32_t height);
 
-void UpdateLightListSSBO(const std::vector<Light> &lights, const SSBO &ssbo);
-
 void ComputeTileLightList(const Camera &camera, const RenderTarget &depth_map,
                           const SSBO &light_list_ssbo,
                           const SSBO &light_tile_list_ssbo);

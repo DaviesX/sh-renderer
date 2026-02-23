@@ -328,15 +328,6 @@ float SurfaceArea(const Geometry& geometry) {
   return area;
 }
 
-std::optional<Light> FindSunLight(const Scene& scene) {
-  for (const auto& light : scene.lights) {
-    if (light.type == Light::Type::Directional) {
-      return light;
-    }
-  }
-  return std::nullopt;
-}
-
 void LoadLightmaps(Scene& scene, const std::filesystem::path& gltf_file) {
   std::filesystem::path base_path = gltf_file.parent_path();
   std::string file_names[3] = {"lightmap_packed_0.exr", "lightmap_packed_1.exr",

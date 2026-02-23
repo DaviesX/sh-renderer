@@ -21,7 +21,7 @@ ShaderProgram CreateSkyAnalyticProgram();
  * @param target The render target to draw the skybox to.
  */
 void DrawSkyAnalytic(const Scene& scene, const Camera& camera,
-                     const Light& sun_light, const RenderTarget& target,
+                     const SunLight& sun_light, const RenderTarget& target,
                      const ShaderProgram& program);
 
 }  // namespace sh_renderer

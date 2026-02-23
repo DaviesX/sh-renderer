@@ -23,7 +23,7 @@ ShaderProgram CreateSkyAnalyticProgram() {
 }
 
 void DrawSkyAnalytic(const Scene& scene, const Camera& camera,
-                     const Light& sun_light, const RenderTarget& target,
+                     const SunLight& sun_light, const RenderTarget& target,
                      const ShaderProgram& program) {
   if (!program) return;
 
