@@ -1,6 +1,12 @@
 #include "compute_light_tile.h"
 
 namespace sh_renderer {
+namespace {
+
+const uint32_t kMaxLightsPerTile = 256;
+const uint32_t kTileSize = 16;
+
+}  // namespace
 
 SSBO CreateLightListSSBO() {
   // TODO: Implement this function.

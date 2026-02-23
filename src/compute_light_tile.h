@@ -9,13 +9,7 @@
 
 namespace sh_renderer {
 
-const uint32_t kMaxLights = 1024;
-const uint32_t kMaxLightsPerTile = 256;
-const uint32_t kTileSize = 16;
-
-// TODO: Design the data structure for light list and light tile list.
-
-SSBO CreateLightListSSBO();
+// TODO: Designt the data structure for light tile list.
 
 SSBO CreateLightTileListSSBO(uint32_t width, uint32_t height);
 

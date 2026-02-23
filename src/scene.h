@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "ssbo.h"
+
 namespace sh_renderer {
 
 // --- Texture ---
@@ -92,6 +94,13 @@ struct Geometry {
 };
 
 // --- Light ---
+
+// TODO: Refactor this struct to separate fields across different light types.
+// In detail, we should create 4 different structs: PointLight, SunLight,
+// SpotLight and AreaLight. In the struct Scene, store 3 lists of lights:
+// point_lights, spot_lights and area_lights. Store the sun light as an optional
+// in the struct Scene as well only support one sun light per scene.
+
 struct Light {
   enum class Type { Point, Directional, Spot, Area };
   Type type;
@@ -124,11 +133,17 @@ struct Scene {
 
   // Baked Indirect SH Lightmaps
   std::array<Texture32F, 3> lightmaps_packed;
+
+  // TODO: GL Resources
+  SSBO point_light_list_ssbo;
+  SSBO spot_light_list_ssbo;
 };
 
 // Uploads the scene geometry and textures to the GPU.
 // Populates the GL resource handles in the scene structs.
 // Uses Direct State Access (DSA) for all GL operations.
+//
+// TODO: Add function to upload the point and spot light lists to the GPU SSBO.
 void UploadSceneToGPU(Scene& scene);
 
 // Transforms the geometry by the transform matrix.
