@@ -27,7 +27,7 @@ struct Cascade {
 };
 
 // Computes the cascade bounds for the given camera and the sun light.
-std::vector<Cascade> ComputeCascades(const Light& sun_light,
+std::vector<Cascade> ComputeCascades(const SunLight& sun_light,
                                      const Camera& camera);
 
 }  // namespace sh_renderer

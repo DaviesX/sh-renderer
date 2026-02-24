@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "ssbo.h"
+
 namespace sh_renderer {
 
 // --- Texture ---
@@ -92,10 +94,17 @@ struct Geometry {
 };
 
 // --- Light ---
-struct Light {
-  enum class Type { Point, Directional, Spot, Area };
-  Type type;
 
+struct PointLight {
+  Eigen::Vector3f position = Eigen::Vector3f::Zero();
+  Eigen::Vector3f color = Eigen::Vector3f::Ones();
+  float intensity = 1.0f;
+
+  // GL Resources
+  int shadow_map_layer = -1;
+};
+
+struct SpotLight {
   Eigen::Vector3f position = Eigen::Vector3f::Zero();
   Eigen::Vector3f direction = Eigen::Vector3f(0, 0, -1);
   Eigen::Vector3f color = Eigen::Vector3f::Ones();
@@ -104,31 +113,52 @@ struct Light {
   float cos_inner_cone = 1.0f;
   float cos_outer_cone = 0.70710678118654752440f;  // cos(pi/4)
 
-  // Area Light Parameters
-  float area = 0.0f;
-  // We will use flux later in the development.
-  // float flux = 0.0f;
-  const Material* material = nullptr;
-  const Geometry* geometry = nullptr;
+  // GL Resources
+  int shadow_map_layer = -1;
+};
+
+struct SunLight {
+  Eigen::Vector3f direction = Eigen::Vector3f(0, -1, 0);
+  Eigen::Vector3f color = Eigen::Vector3f::Ones();
+  float intensity = 1.0f;
 
   // GL Resources
-  // Shadow map atlas tile indices / handles could go here later.
   int shadow_map_layer = -1;
+};
+
+struct AreaLight {
+  Eigen::Vector3f position = Eigen::Vector3f::Zero();
+  Eigen::Vector3f direction = Eigen::Vector3f(0, 0, -1);
+  Eigen::Vector3f color = Eigen::Vector3f::Ones();
+  float intensity = 1.0f;
+  float area = 0.0f;
+  const Material* material = nullptr;
+  const Geometry* geometry = nullptr;
 };
 
 // --- Scene ---
 struct Scene {
   std::vector<Geometry> geometries;
   std::vector<Material> materials;
-  std::vector<Light> lights;
+
+  std::vector<PointLight> point_lights;
+  std::vector<SpotLight> spot_lights;
+  std::vector<AreaLight> area_lights;
+  std::optional<SunLight> sun_light;
 
   // Baked Indirect SH Lightmaps
   std::array<Texture32F, 3> lightmaps_packed;
+
+  // GL Resources
+  SSBO point_light_list_ssbo;
+  SSBO spot_light_list_ssbo;
 };
 
 // Uploads the scene geometry and textures to the GPU.
 // Populates the GL resource handles in the scene structs.
 // Uses Direct State Access (DSA) for all GL operations.
+//
+// TODO: Add function to upload the point and spot light lists to the GPU SSBO.
 void UploadSceneToGPU(Scene& scene);
 
 // Transforms the geometry by the transform matrix.
@@ -138,9 +168,6 @@ std::vector<Eigen::Vector4f> TransformedTangents(const Geometry& geometry);
 
 // Returns the surface area of the geometry.
 float SurfaceArea(const Geometry& geometry);
-
-// Returns the sun light if it exists.
-std::optional<Light> FindSunLight(const Scene& scene);
 
 // Loads the SH lightmap EXRs into the scene.
 void LoadLightmaps(Scene& scene, const std::filesystem::path& gltf_file);

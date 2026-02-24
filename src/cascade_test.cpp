@@ -7,9 +7,8 @@ namespace {
 
 constexpr float kEpsilon = 1e-4f;
 
-Light MakeSunLight(const Eigen::Vector3f& direction) {
-  Light light;
-  light.type = Light::Type::Directional;
+SunLight MakeSunLight(const Eigen::Vector3f& direction) {
+  SunLight light;
   light.direction = direction;
   light.color = Eigen::Vector3f::Ones();
   light.intensity = 1.0f;
@@ -30,7 +29,7 @@ Camera MakeDefaultCamera() {
 // --- Basic Output Shape ---
 
 TEST(CascadeTest, ReturnsRequestedNumberOfCascades) {
-  Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
+  SunLight sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
   Camera camera = MakeDefaultCamera();
 
   auto cascades = ComputeCascades(sun, camera);
@@ -40,7 +39,7 @@ TEST(CascadeTest, ReturnsRequestedNumberOfCascades) {
 // --- Split Depths ---
 
 TEST(CascadeTest, LastCascadeSplitEqualsZFar) {
-  Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
+  SunLight sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
   Camera camera = MakeDefaultCamera();
 
   auto cascades = ComputeCascades(sun, camera);
@@ -48,7 +47,7 @@ TEST(CascadeTest, LastCascadeSplitEqualsZFar) {
 }
 
 TEST(CascadeTest, SplitDepthsAreMonotonicallyIncreasing) {
-  Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
+  SunLight sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
   Camera camera = MakeDefaultCamera();
 
   auto cascades = ComputeCascades(sun, camera);
@@ -62,7 +61,7 @@ TEST(CascadeTest, SplitDepthsAreMonotonicallyIncreasing) {
 // --- Orthographic Bounds ---
 
 TEST(CascadeTest, OrthoBoundsAreValid) {
-  Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
+  SunLight sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
   Camera camera = MakeDefaultCamera();
 
   auto cascades = ComputeCascades(sun, camera);
@@ -75,7 +74,7 @@ TEST(CascadeTest, OrthoBoundsAreValid) {
 }
 
 TEST(CascadeTest, LaterCascadesAreLargerOrEqual) {
-  Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
+  SunLight sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
   Camera camera = MakeDefaultCamera();
 
   auto cascades = ComputeCascades(sun, camera);
@@ -89,7 +88,7 @@ TEST(CascadeTest, LaterCascadesAreLargerOrEqual) {
 // --- View-Projection Matrix ---
 
 TEST(CascadeTest, ViewProjectionMatrixIsFinite) {
-  Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
+  SunLight sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
   Camera camera = MakeDefaultCamera();
 
   auto cascades = ComputeCascades(sun, camera);
@@ -100,7 +99,7 @@ TEST(CascadeTest, ViewProjectionMatrixIsFinite) {
 }
 
 TEST(CascadeTest, CameraOriginMapsInsideNDC) {
-  Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
+  SunLight sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
   Camera camera = MakeDefaultCamera();
   camera.position = Eigen::Vector3f::Zero();
 
@@ -123,7 +122,7 @@ TEST(CascadeTest, CameraOriginMapsInsideNDC) {
 // --- Different Light Directions ---
 
 TEST(CascadeTest, DiagonalLightProducesValidCascades) {
-  Light sun = MakeSunLight(Eigen::Vector3f(1, -1, -1).normalized());
+  SunLight sun = MakeSunLight(Eigen::Vector3f(1, -1, -1).normalized());
   Camera camera = MakeDefaultCamera();
 
   auto cascades = ComputeCascades(sun, camera);
@@ -138,7 +137,7 @@ TEST(CascadeTest, DiagonalLightProducesValidCascades) {
 
 TEST(CascadeTest, HorizontalLightProducesValidCascades) {
   // Light coming from +X (sunrise/sunset scenario).
-  Light sun = MakeSunLight(Eigen::Vector3f(-1, 0, 0));
+  SunLight sun = MakeSunLight(Eigen::Vector3f(-1, 0, 0));
   Camera camera = MakeDefaultCamera();
 
   auto cascades = ComputeCascades(sun, camera);
@@ -153,7 +152,7 @@ TEST(CascadeTest, HorizontalLightProducesValidCascades) {
 // --- Camera Pose Variations ---
 
 TEST(CascadeTest, TranslatedCameraShiftsCascadeBounds) {
-  Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
+  SunLight sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
   Camera cam_a = MakeDefaultCamera();
   cam_a.position = Eigen::Vector3f::Zero();
 
@@ -170,7 +169,7 @@ TEST(CascadeTest, TranslatedCameraShiftsCascadeBounds) {
 }
 
 TEST(CascadeTest, RotatedCameraChangesCascadeBounds) {
-  Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
+  SunLight sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
   Camera cam_a = MakeDefaultCamera();
 
   Camera cam_b = MakeDefaultCamera();
@@ -189,7 +188,7 @@ TEST(CascadeTest, RotatedCameraChangesCascadeBounds) {
 
 TEST(CascadeTest, NearlyVerticalLightUsesAlternateUp) {
   // Light direction almost exactly along +Y triggers alternate up vector path.
-  Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0.001f).normalized());
+  SunLight sun = MakeSunLight(Eigen::Vector3f(0, -1, 0.001f).normalized());
   Camera camera = MakeDefaultCamera();
 
   auto cascades = ComputeCascades(sun, camera);
@@ -202,7 +201,7 @@ TEST(CascadeTest, NearlyVerticalLightUsesAlternateUp) {
 // --- Z Range Padding ---
 
 TEST(CascadeTest, ZRangeIncludesPadding) {
-  Light sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
+  SunLight sun = MakeSunLight(Eigen::Vector3f(0, -1, 0));
   Camera camera = MakeDefaultCamera();
 
   auto cascades = ComputeCascades(sun, camera);

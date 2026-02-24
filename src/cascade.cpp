@@ -51,7 +51,7 @@ Eigen::Matrix4f Ortho(float left, float right, float bottom, float top,
 
 }  // namespace
 
-std::vector<Cascade> ComputeCascades(const Light& sun_light,
+std::vector<Cascade> ComputeCascades(const SunLight& sun_light,
                                      const Camera& camera) {
   std::vector<Cascade> cascades;
   cascades.resize(kNumShadowMapCascades);

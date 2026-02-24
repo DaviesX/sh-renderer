@@ -492,28 +492,24 @@ void ProcessMaterials(const tinygltf::Model& model,
 
 void ProcessPunctualLight(const tinygltf::Model& model,
                           const tinygltf::Value& light_obj,
-                          const Eigen::Affine3f& transform,
-                          std::vector<Light>* result) {
+                          const Eigen::Affine3f& transform, Scene* scene) {
   // Parse KHR_lights_punctual object
   if (!light_obj.IsObject()) return;
 
-  Light l;
+  Eigen::Vector3f position = transform.translation();
+  Eigen::Vector3f direction = transform.rotation() * Eigen::Vector3f(0, 0, -1);
 
-  // Position/Direction from transform
-  l.position = transform.translation();
-  l.direction = transform.rotation() * Eigen::Vector3f(0, 0, -1);
-
-  float len_sq = l.direction.squaredNorm();
+  float len_sq = direction.squaredNorm();
   if (len_sq > 1e-8f) {
     if (std::isinf(len_sq) || std::isnan(len_sq)) {
       LOG(WARNING) << "Light direction is NaN/Inf. Fallback to -Z.";
-      l.direction = Eigen::Vector3f(0, 0, -1);
+      direction = Eigen::Vector3f(0, 0, -1);
     } else {
-      l.direction.normalize();
+      direction.normalize();
     }
   } else {
     LOG(WARNING) << "Light direction is zero. Fallback to -Z.";
-    l.direction = Eigen::Vector3f(0, 0, -1);
+    direction = Eigen::Vector3f(0, 0, -1);
   }
 
   std::string type_str;
@@ -521,47 +517,60 @@ void ProcessPunctualLight(const tinygltf::Model& model,
     type_str = light_obj.Get("type").Get<std::string>();
   }
 
-  if (type_str == "point")
-    l.type = Light::Type::Point;
-  else if (type_str == "directional")
-    l.type = Light::Type::Directional;
-  else if (type_str == "spot")
-    l.type = Light::Type::Spot;
-
+  Eigen::Vector3f color = Eigen::Vector3f::Ones();
   if (light_obj.Has("color")) {
     const auto& color_arr = light_obj.Get("color");
     if (color_arr.IsArray() && color_arr.ArrayLen() == 3) {
-      l.color = Eigen::Vector3f(color_arr.Get(0).Get<double>(),
-                                color_arr.Get(1).Get<double>(),
-                                color_arr.Get(2).Get<double>());
+      color = Eigen::Vector3f(color_arr.Get(0).Get<double>(),
+                              color_arr.Get(1).Get<double>(),
+                              color_arr.Get(2).Get<double>());
     }
   }
 
+  float intensity = 1.0f;
   if (light_obj.Has("intensity")) {
-    l.intensity = static_cast<float>(light_obj.Get("intensity").Get<double>()) *
-                  kLightIntensityScale;
+    intensity = static_cast<float>(light_obj.Get("intensity").Get<double>()) *
+                kLightIntensityScale;
   }
 
-  if (l.type == Light::Type::Spot && light_obj.Has("spot")) {
-    const auto& spot = light_obj.Get("spot");
-    if (spot.Has("innerConeAngle")) {
-      float inner_cone_angle =
-          static_cast<float>(spot.Get("innerConeAngle").Get<double>());
-      l.cos_inner_cone = std::cos(inner_cone_angle);
+  if (type_str == "point") {
+    PointLight l;
+    l.position = position;
+    l.color = color;
+    l.intensity = intensity;
+    scene->point_lights.push_back(std::move(l));
+  } else if (type_str == "directional") {
+    SunLight l;
+    l.direction = direction;
+    l.color = color;
+    l.intensity = intensity;
+    scene->sun_light = std::move(l);
+  } else if (type_str == "spot") {
+    SpotLight l;
+    l.position = position;
+    l.direction = direction;
+    l.color = color;
+    l.intensity = intensity;
+    if (light_obj.Has("spot")) {
+      const auto& spot = light_obj.Get("spot");
+      if (spot.Has("innerConeAngle")) {
+        float inner_cone_angle =
+            static_cast<float>(spot.Get("innerConeAngle").Get<double>());
+        l.cos_inner_cone = std::cos(inner_cone_angle);
+      }
+      if (spot.Has("outerConeAngle")) {
+        float outer_cone_angle =
+            static_cast<float>(spot.Get("outerConeAngle").Get<double>());
+        l.cos_outer_cone = std::cos(outer_cone_angle);
+      }
     }
-    if (spot.Has("outerConeAngle")) {
-      float outer_cone_angle =
-          static_cast<float>(spot.Get("outerConeAngle").Get<double>());
-      l.cos_outer_cone = std::cos(outer_cone_angle);
-    }
+    scene->spot_lights.push_back(std::move(l));
   }
-
-  result->push_back(std::move(l));
 }
 
 void ProcessAreaLights(const std::vector<Material>& materials,
                        const std::vector<Geometry>& geometries,
-                       std::vector<Light>* result) {
+                       std::vector<AreaLight>* result) {
   // Group geometries by material id for faster lookup.
   std::unordered_map<int, std::vector<const Geometry*>> geos_by_mat;
   for (size_t i = 0; i < geometries.size(); i++) {
@@ -585,8 +594,7 @@ void ProcessAreaLights(const std::vector<Material>& materials,
     }
     const auto& geos = geos_it->second;
     for (const auto& geo : geos) {
-      Light area_light;
-      area_light.type = Light::Type::Area;
+      AreaLight area_light;
       area_light.intensity = mat.emissive_strength;
       area_light.color = mat.emissive_factor;
       area_light.material = &materials[mat_idx];
@@ -631,7 +639,7 @@ bool TraverseNodes(const tinygltf::Model& model, int node_index,
           const auto& lights_arr = model_ext.Get("lights");
           if (lights_arr.IsArray() && light_idx < lights_arr.ArrayLen()) {
             ProcessPunctualLight(model, lights_arr.Get(light_idx),
-                                 global_transform, &scene->lights);
+                                 global_transform, scene);
           }
         }
       }
@@ -642,26 +650,6 @@ bool TraverseNodes(const tinygltf::Model& model, int node_index,
     if (!TraverseNodes(model, child, global_transform, scene)) return false;
   }
   return true;
-}
-
-const Light* BrightestDirectionalLight(const std::vector<Light>& lights) {
-  float max_intensity = -1.0f;
-  int max_idx = -1;
-
-  for (int i = 0; i < lights.size(); ++i) {
-    if (lights[i].type == Light::Type::Directional) {
-      if (lights[i].intensity > max_intensity) {
-        max_intensity = lights[i].intensity;
-        max_idx = i;
-      }
-    }
-  }
-
-  if (max_idx < 0) {
-    return nullptr;
-  }
-
-  return &lights[max_idx];
 }
 
 }  // namespace
@@ -707,7 +695,7 @@ std::optional<Scene> LoadScene(const std::filesystem::path& gltf_file) {
   }
 
   // Process Area Lights (from emissive materials)
-  ProcessAreaLights(scene.materials, scene.geometries, &scene.lights);
+  ProcessAreaLights(scene.materials, scene.geometries, &scene.area_lights);
 
   // Load Baked Indirect SH Lightmaps
   LoadLightmaps(scene, gltf_file);
