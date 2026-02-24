@@ -99,6 +99,7 @@ struct PointLight {
   Eigen::Vector3f position = Eigen::Vector3f::Zero();
   Eigen::Vector3f color = Eigen::Vector3f::Ones();
   float intensity = 1.0f;
+  float radius = 0.0f;  // Bounding sphere for culling.
 
   // GL Resources
   int shadow_map_layer = -1;
@@ -109,6 +110,7 @@ struct SpotLight {
   Eigen::Vector3f direction = Eigen::Vector3f(0, 0, -1);
   Eigen::Vector3f color = Eigen::Vector3f::Ones();
   float intensity = 1.0f;
+  float radius = 0.0f;  // Bounding sphere for culling.
 
   float cos_inner_cone = 1.0f;
   float cos_outer_cone = 0.70710678118654752440f;  // cos(pi/4)
@@ -154,12 +156,40 @@ struct Scene {
   SSBO spot_light_list_ssbo;
 };
 
+// GPU-side light structs (std430 layout).
+// These are tightly packed for SSBO upload.
+struct GpuPointLight {
+  float position[3];
+  float radius;
+  float color[3];
+  float intensity;
+};
+static_assert(sizeof(GpuPointLight) == 32);
+
+struct GpuSpotLight {
+  float position[3];
+  float radius;
+  float direction[3];
+  float intensity;
+  float color[3];
+  float cos_inner_cone;
+  float cos_outer_cone;
+  float _pad[3];
+};
+static_assert(sizeof(GpuSpotLight) == 64);
+
+// Computes the bounding radius of a light from its flux via inverse-square law.
+// radius = sqrt(flux / threshold), where flux = intensity * max(color).
+float ComputeLightRadius(float intensity, const Eigen::Vector3f& color,
+                         float threshold = 0.01f);
+
 // Uploads the scene geometry and textures to the GPU.
 // Populates the GL resource handles in the scene structs.
 // Uses Direct State Access (DSA) for all GL operations.
-//
-// TODO: Add function to upload the point and spot light lists to the GPU SSBO.
 void UploadSceneToGPU(Scene& scene);
+
+// Uploads the point and spot light lists to the GPU SSBOs.
+void UploadLightsToGPU(Scene& scene);
 
 // Transforms the geometry by the transform matrix.
 std::vector<Eigen::Vector3f> TransformedVertices(const Geometry& geometry);

@@ -3,6 +3,7 @@
 #include <glog/logging.h>
 
 #include "cascade.h"
+#include "compute_light_tile.h"
 #include "draw_sky.h"
 #include "glad.h"
 #include "shader.h"
@@ -30,7 +31,8 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
                        const std::vector<RenderTarget>& sun_shadow_maps,
                        const std::vector<Cascade>& sun_cascades,
                        const ShaderProgram& program,
-                       const RenderTarget& hdr_target) {
+                       const RenderTarget& hdr_target,
+                       const LightTileResources& tile_resources) {
   if (!program) return;
   program.Use();
 
@@ -87,6 +89,14 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
   }
 
   program.Uniform("u_sky_color", kSkyColor);
+
+  // Forward+ tile info.
+  BindTileLightResources(scene, tile_resources);
+  GLint tile_count_loc = glGetUniformLocation(program.id(), "u_tile_count");
+  glUniform2i(tile_count_loc, tile_resources.tile_count_x,
+              tile_resources.tile_count_y);
+  GLint screen_size_loc = glGetUniformLocation(program.id(), "u_screen_size");
+  glUniform2i(screen_size_loc, hdr_target.width, hdr_target.height);
 
   // Bind Lightmap Textures
   if (scene.lightmaps_packed[0].texture_id != 0) {

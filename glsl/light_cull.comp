@@ -1,0 +1,244 @@
+#version 460 core
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// --- Point Light SSBO (binding = 0) ---
+struct PointLight {
+  vec3 position;
+  float radius;
+  vec3 color;
+  float intensity;
+};
+
+layout(std430, binding = 0) readonly buffer PointLightBuffer {
+  uint point_light_count;
+  uint pad0[3];
+  PointLight point_lights[];
+};
+
+// --- Spot Light SSBO (binding = 1) ---
+struct SpotLight {
+  vec3 position;
+  float radius;
+  vec3 direction;
+  float intensity;
+  vec3 color;
+  float cos_inner_cone;
+  float cos_outer_cone;
+  float pad1[3];
+};
+
+layout(std430, binding = 1) readonly buffer SpotLightBuffer {
+  uint spot_light_count;
+  uint pad2[3];
+  SpotLight spot_lights[];
+};
+
+// --- Tile Light Index List SSBO (binding = 2) ---
+// Layout: [tile_0_offset, tile_0_count, tile_1_offset, tile_1_count, ...]
+//         followed by a flat array of light indices.
+// Each index encodes: bit 31 = type (0=point, 1=spot), bits 0-30 = index.
+layout(std430, binding = 2) buffer TileLightIndexBuffer {
+  uint tile_headers[];  // First num_tiles*2 uints are (offset, count) pairs.
+                        // Remaining uints are the light indices.
+};
+
+// --- Uniforms ---
+uniform mat4 u_projection;
+uniform mat4 u_inv_projection;
+uniform mat4 u_view;
+uniform ivec2 u_screen_size;
+
+// Depth texture from the depth pre-pass.
+layout(binding = 15) uniform sampler2D u_depth_texture;
+
+// Debug heatmap output.
+layout(rgba8, binding = 14) uniform writeonly image2D u_debug_heatmap;
+
+// --- Constants ---
+const uint TILE_SIZE = 16;
+const uint MAX_LIGHTS_PER_TILE = 256;
+
+// --- Shared Memory ---
+shared uint s_min_depth_uint;
+shared uint s_max_depth_uint;
+shared uint s_tile_light_count;
+shared uint s_tile_light_indices[MAX_LIGHTS_PER_TILE];
+
+// Frustum planes (view space): left, right, bottom, top.
+shared vec4 s_frustum_planes[4];
+
+// Reconstruct view-space position from screen coordinates and depth.
+vec3 ScreenToView(vec2 screen_pos, float depth) {
+  vec2 ndc = screen_pos / vec2(u_screen_size) * 2.0 - 1.0;
+  vec4 clip = vec4(ndc, depth * 2.0 - 1.0, 1.0);
+  vec4 view = u_inv_projection * clip;
+  return view.xyz / view.w;
+}
+
+// Create a plane from 3 points (origin assumed as one point).
+// Returns vec4(normal.xyz, d) where normal dot p + d >= 0.
+vec4 CreatePlane(vec3 a, vec3 b) {
+  vec3 n = normalize(cross(a, b));
+  return vec4(n, 0.0);
+}
+
+// Sphere-plane test. Returns true if sphere is on positive side or intersects.
+bool SphereInsidePlane(vec3 center, float radius, vec4 plane) {
+  return dot(plane.xyz, center) + plane.w > -radius;
+}
+
+// Test sphere against the tile frustum (4 side planes + near/far).
+bool SphereInFrustum(vec3 center, float radius, float min_depth_view,
+                     float max_depth_view) {
+  // Side planes.
+  for (int i = 0; i < 4; ++i) {
+    if (!SphereInsidePlane(center, radius, s_frustum_planes[i])) {
+      return false;
+    }
+  }
+
+  // Near/far in view space (negative Z = forward).
+  // near plane: z >= min_depth_view (closest)
+  // far plane:  z <= max_depth_view (farthest)
+  if (center.z + radius < min_depth_view) return false;
+  if (center.z - radius > max_depth_view) return false;
+
+  return true;
+}
+
+void main() {
+  uvec2 tile_id = gl_WorkGroupID.xy;
+  uint local_index = gl_LocalInvocationIndex;
+  uvec2 tile_count = gl_NumWorkGroups.xy;
+  uint tile_flat_index = tile_id.y * tile_count.x + tile_id.x;
+
+  // Total number of tiles — header region size.
+  uint total_tiles = tile_count.x * tile_count.y;
+  uint header_size = total_tiles * 2;  // (offset, count) per tile
+
+  // Initialize shared memory.
+  if (local_index == 0) {
+    s_min_depth_uint = 0xFFFFFFFF;
+    s_max_depth_uint = 0;
+    s_tile_light_count = 0;
+  }
+  barrier();
+
+  // Sample depth texture for this thread's pixel.
+  ivec2 pixel = ivec2(tile_id * TILE_SIZE + gl_LocalInvocationID.xy);
+  if (pixel.x < u_screen_size.x && pixel.y < u_screen_size.y) {
+    float depth = texelFetch(u_depth_texture, pixel, 0).r;
+    uint depth_uint = floatBitsToUint(depth);
+    atomicMin(s_min_depth_uint, depth_uint);
+    atomicMax(s_max_depth_uint, depth_uint);
+  }
+  barrier();
+
+  // Reconstruct tile frustum (leader thread).
+  if (local_index == 0) {
+    float min_depth = uintBitsToFloat(s_min_depth_uint);
+    float max_depth = uintBitsToFloat(s_max_depth_uint);
+
+    // Tile corners in screen space.
+    vec2 tile_min = vec2(tile_id) * float(TILE_SIZE);
+    vec2 tile_max = tile_min + vec2(TILE_SIZE);
+
+    // Clamp to screen.
+    tile_max = min(tile_max, vec2(u_screen_size));
+
+    // Reconstruct 4 corner points in view space (at far depth).
+    vec3 corners[4];
+    corners[0] = ScreenToView(vec2(tile_min.x, tile_min.y), 1.0);
+    corners[1] = ScreenToView(vec2(tile_max.x, tile_min.y), 1.0);
+    corners[2] = ScreenToView(vec2(tile_max.x, tile_max.y), 1.0);
+    corners[3] = ScreenToView(vec2(tile_min.x, tile_max.y), 1.0);
+
+    // Build 4 side planes (from origin to edges).
+    // Left: origin, bottom-left, top-left (normals point inward).
+    s_frustum_planes[0] = CreatePlane(corners[3], corners[0]);  // Left
+    s_frustum_planes[1] = CreatePlane(corners[1], corners[2]);  // Right
+    s_frustum_planes[2] = CreatePlane(corners[0], corners[1]);  // Bottom
+    s_frustum_planes[3] = CreatePlane(corners[2], corners[3]);  // Top
+  }
+  barrier();
+
+  float min_depth_ndc = uintBitsToFloat(s_min_depth_uint);
+  float max_depth_ndc = uintBitsToFloat(s_max_depth_uint);
+
+  // Convert NDC depths to view-space Z.
+  // For a standard projection, view.z = proj[3][2] / (ndc_z * 2 - 1 +
+  // proj[2][2]).
+  float min_depth_view =
+      u_projection[3][2] / (min_depth_ndc * 2.0 - 1.0 + u_projection[2][2]);
+  float max_depth_view =
+      u_projection[3][2] / (max_depth_ndc * 2.0 - 1.0 + u_projection[2][2]);
+
+  // Ensure min <= max (view space Z is negative, so min_view is more negative).
+  float near_z = max(min_depth_view, max_depth_view);  // Closest to camera
+  float far_z = min(min_depth_view, max_depth_view);   // Farthest from camera
+
+  // Cull point lights.
+  uint total_point = point_light_count;
+  uint total_spot = spot_light_count;
+  uint num_threads = TILE_SIZE * TILE_SIZE;
+
+  for (uint i = local_index; i < total_point; i += num_threads) {
+    vec3 world_pos = point_lights[i].position;
+    float radius = point_lights[i].radius;
+
+    // Transform to view space.
+    vec3 view_pos = (u_view * vec4(world_pos, 1.0)).xyz;
+
+    if (SphereInFrustum(view_pos, radius, far_z, near_z)) {
+      uint slot = atomicAdd(s_tile_light_count, 1);
+      if (slot < MAX_LIGHTS_PER_TILE) {
+        // Bit 31 = 0 for point light.
+        s_tile_light_indices[slot] = i;
+      }
+    }
+  }
+
+  // Cull spot lights.
+  for (uint i = local_index; i < total_spot; i += num_threads) {
+    vec3 world_pos = spot_lights[i].position;
+    float radius = spot_lights[i].radius;
+
+    // Transform to view space.
+    vec3 view_pos = (u_view * vec4(world_pos, 1.0)).xyz;
+
+    if (SphereInFrustum(view_pos, radius, far_z, near_z)) {
+      uint slot = atomicAdd(s_tile_light_count, 1);
+      if (slot < MAX_LIGHTS_PER_TILE) {
+        // Bit 31 = 1 for spot light.
+        s_tile_light_indices[slot] = (1u << 31) | i;
+      }
+    }
+  }
+  barrier();
+
+  // Write results to global SSBO (leader thread).
+  if (local_index == 0) {
+    uint count = min(s_tile_light_count, MAX_LIGHTS_PER_TILE);
+
+    // Compute this tile's offset into the global index array.
+    // We use a fixed stride of MAX_LIGHTS_PER_TILE per tile.
+    uint offset = header_size + tile_flat_index * MAX_LIGHTS_PER_TILE;
+
+    tile_headers[tile_flat_index * 2 + 0] = offset;
+    tile_headers[tile_flat_index * 2 + 1] = count;
+
+    for (uint i = 0; i < count; ++i) {
+      tile_headers[offset + i] = s_tile_light_indices[i];
+    }
+  }
+
+  // Write debug heatmap.
+  if (pixel.x < u_screen_size.x && pixel.y < u_screen_size.y) {
+    uint count = min(s_tile_light_count, MAX_LIGHTS_PER_TILE);
+    float heat = float(count) / 32.0;  // Normalize: 32 lights = max brightness.
+    vec3 color =
+        mix(vec3(0.0, 0.0, 0.1), vec3(1.0, 0.2, 0.0), clamp(heat, 0.0, 1.0));
+    imageStore(u_debug_heatmap, pixel, vec4(color, 1.0));
+  }
+}
