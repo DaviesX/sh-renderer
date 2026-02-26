@@ -25,8 +25,8 @@ ShaderProgram CreateRadianceProgram();
 void DrawSceneRadiance(const Scene& scene, const Camera& camera,
                        const std::vector<RenderTarget>& sun_shadow_maps,
                        const std::vector<Cascade>& sun_cascades,
+                       const TileLightListList& tile_light_list,
                        const ShaderProgram& program,
-                       const RenderTarget& hdr_target,
-                       const LightTileResources& tile_resources);
+                       const RenderTarget& hdr_target);
 
 }  // namespace sh_renderer

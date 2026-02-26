@@ -30,9 +30,9 @@ ShaderProgram CreateRadianceProgram() {
 void DrawSceneRadiance(const Scene& scene, const Camera& camera,
                        const std::vector<RenderTarget>& sun_shadow_maps,
                        const std::vector<Cascade>& sun_cascades,
+                       const TileLightListList& tile_resources,
                        const ShaderProgram& program,
-                       const RenderTarget& hdr_target,
-                       const LightTileResources& tile_resources) {
+                       const RenderTarget& hdr_target) {
   if (!program) return;
   program.Use();
 
@@ -91,7 +91,7 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
   program.Uniform("u_sky_color", kSkyColor);
 
   // Forward+ tile info.
-  BindTileLightResources(scene, tile_resources);
+  BindTileLightList(scene, tile_resources);
   GLint tile_count_loc = glGetUniformLocation(program.id(), "u_tile_count");
   glUniform2i(tile_count_loc, tile_resources.tile_count_x,
               tile_resources.tile_count_y);

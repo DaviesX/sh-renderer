@@ -78,8 +78,8 @@ void Run(const std::filesystem::path& scene_path) {
   RenderTarget hdr_target = CreateHDRTarget(initial_width, initial_height);
   std::vector<RenderTarget> sun_shadow_map_targets =
       CreateCascadedShadowMapTargets();
-  LightTileResources tile_resources =
-      CreateLightTileResources(initial_width, initial_height);
+  TileLightListList tile_light_list =
+      CreateTileLightList(initial_width, initial_height);
 
   InputState input_state;
   InteractionState interaction_state;
@@ -133,12 +133,12 @@ void Run(const std::filesystem::path& scene_path) {
 
     // 1.5. Compute Light Culling (Forward+)
     ComputeTileLightList(camera, hdr_target, *scene, light_cull_program,
-                         tile_resources);
+                         &tile_light_list);
 
     // 2. Radiance Pass (Forward PBR)
     // DrawRadiance will handle clearing color, setting LEQUAL, etc.
     DrawSceneRadiance(*scene, camera, sun_shadow_map_targets, sun_cascades,
-                      radiance_program, hdr_target, tile_resources);
+                      tile_light_list, radiance_program, hdr_target);
 
     SunLight default_sun;
     default_sun.direction = Eigen::Vector3f(0.5f, -1.0f, 0.1f).normalized();
@@ -175,7 +175,7 @@ void Run(const std::filesystem::path& scene_path) {
     glDeleteFramebuffers(1, &target.fbo);
     glDeleteTextures(1, &target.depth_buffer);
   }
-  DestroyLightTileResources(tile_resources);
+  DestroyTileLightList(&tile_light_list);
 }
 
 }  // namespace sh_renderer
