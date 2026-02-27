@@ -35,12 +35,12 @@ layout(std430, binding = 1) readonly buffer SpotLightBuffer {
 };
 
 // --- Tile Light Index List SSBO (binding = 2) ---
-// Layout: [tile_0_offset, tile_0_count, tile_1_offset, tile_1_count, ...]
+// Layout: [tile_0_offset, tile_0_p_count, tile_0_s_count, ...]
 //         followed by a flat array of light indices.
-// Each index encodes: bit 31 = type (0=point, 1=spot), bits 0-30 = index.
 layout(std430, binding = 2) buffer TileLightIndexBuffer {
-  uint tile_headers[];  // First num_tiles*2 uints are (offset, count) pairs.
-                        // Remaining uints are the light indices.
+  uint
+      tile_headers[];  // First num_tiles*3 uints are (offset, p_count, s_count)
+                       // tuples. Remaining uints are the light indices.
 };
 
 // --- Uniforms ---
@@ -62,8 +62,10 @@ const uint MAX_LIGHTS_PER_TILE = 256;
 // --- Shared Memory ---
 shared uint s_min_depth_uint;
 shared uint s_max_depth_uint;
-shared uint s_tile_light_count;
-shared uint s_tile_light_indices[MAX_LIGHTS_PER_TILE];
+shared uint s_tile_point_count;
+shared uint s_tile_spot_count;
+shared uint s_tile_point_indices[MAX_LIGHTS_PER_TILE];
+shared uint s_tile_spot_indices[MAX_LIGHTS_PER_TILE];
 
 // Frustum planes (view space): left, right, bottom, top.
 shared vec4 s_frustum_planes[4];
@@ -115,13 +117,14 @@ void main() {
 
   // Total number of tiles — header region size.
   uint total_tiles = tile_count.x * tile_count.y;
-  uint header_size = total_tiles * 2;  // (offset, count) per tile
+  uint header_size = total_tiles * 3;  // (offset, p_count, s_count) per tile
 
   // Initialize shared memory.
   if (local_index == 0) {
     s_min_depth_uint = 0xFFFFFFFF;
     s_max_depth_uint = 0;
-    s_tile_light_count = 0;
+    s_tile_point_count = 0;
+    s_tile_spot_count = 0;
   }
   barrier();
 
@@ -191,10 +194,9 @@ void main() {
     vec3 view_pos = (u_view * vec4(world_pos, 1.0)).xyz;
 
     if (SphereInFrustum(view_pos, radius, far_z, near_z)) {
-      uint slot = atomicAdd(s_tile_light_count, 1);
+      uint slot = atomicAdd(s_tile_point_count, 1);
       if (slot < MAX_LIGHTS_PER_TILE) {
-        // Bit 31 = 0 for point light.
-        s_tile_light_indices[slot] = i;
+        s_tile_point_indices[slot] = i;
       }
     }
   }
@@ -208,10 +210,9 @@ void main() {
     vec3 view_pos = (u_view * vec4(world_pos, 1.0)).xyz;
 
     if (SphereInFrustum(view_pos, radius, far_z, near_z)) {
-      uint slot = atomicAdd(s_tile_light_count, 1);
+      uint slot = atomicAdd(s_tile_spot_count, 1);
       if (slot < MAX_LIGHTS_PER_TILE) {
-        // Bit 31 = 1 for spot light.
-        s_tile_light_indices[slot] = (1u << 31) | i;
+        s_tile_spot_indices[slot] = i;
       }
     }
   }
@@ -219,24 +220,37 @@ void main() {
 
   // Write results to global SSBO (leader thread).
   if (local_index == 0) {
-    uint count = min(s_tile_light_count, MAX_LIGHTS_PER_TILE);
+    uint p_count = min(s_tile_point_count, MAX_LIGHTS_PER_TILE);
+    uint s_count = min(s_tile_spot_count, MAX_LIGHTS_PER_TILE);
+
+    // Ensure total doesn't exceed max allocation stride per tile
+    if (p_count + s_count > MAX_LIGHTS_PER_TILE) {
+      s_count = MAX_LIGHTS_PER_TILE - p_count;
+    }
 
     // Compute this tile's offset into the global index array.
     // We use a fixed stride of MAX_LIGHTS_PER_TILE per tile.
     uint offset = header_size + tile_flat_index * MAX_LIGHTS_PER_TILE;
 
-    tile_headers[tile_flat_index * 2 + 0] = offset;
-    tile_headers[tile_flat_index * 2 + 1] = count;
+    tile_headers[tile_flat_index * 3 + 0] = offset;
+    tile_headers[tile_flat_index * 3 + 1] = p_count;
+    tile_headers[tile_flat_index * 3 + 2] = s_count;
 
-    for (uint i = 0; i < count; ++i) {
-      tile_headers[offset + i] = s_tile_light_indices[i];
+    for (uint i = 0; i < p_count; ++i) {
+      tile_headers[offset + i] = s_tile_point_indices[i];
+    }
+    for (uint i = 0; i < s_count; ++i) {
+      tile_headers[offset + p_count + i] = s_tile_spot_indices[i];
     }
   }
 
   // Write debug heatmap.
   if (pixel.x < u_screen_size.x && pixel.y < u_screen_size.y) {
-    uint count = min(s_tile_light_count, MAX_LIGHTS_PER_TILE);
-    float heat = float(count) / 32.0;  // Normalize: 32 lights = max brightness.
+    uint total_count = min(s_tile_point_count, MAX_LIGHTS_PER_TILE) +
+                       min(s_tile_spot_count, MAX_LIGHTS_PER_TILE);
+    total_count = min(total_count, MAX_LIGHTS_PER_TILE);
+    float heat =
+        float(total_count) / 32.0;  // Normalize: 32 lights = max brightness.
     vec3 color =
         mix(vec3(0.0, 0.0, 0.1), vec3(1.0, 0.2, 0.0), clamp(heat, 0.0, 1.0));
     imageStore(u_debug_heatmap, pixel, vec4(color, 1.0));
