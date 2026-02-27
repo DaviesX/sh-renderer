@@ -23,7 +23,7 @@ vec3 PreethamSky(vec3 viewDir, vec3 sunDir) {
   float mie = pow(max(0.0, cosGamma), 100.0) * 0.5;
 
   // Sun disk
-  float sunUtils = step(0.9995, cosGamma);  // Small disk
+  float sunUtils = smoothstep(0.9995, 0.99975, cosGamma);  // Small disk
 
   vec3 skyColor = rayleigh * 0.5 + vec3(mie) + vec3(sunUtils) * 20.0;
   return skyColor;

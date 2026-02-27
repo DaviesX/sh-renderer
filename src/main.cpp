@@ -98,6 +98,8 @@ void Run(const std::filesystem::path& scene_path) {
     // Get the current framebuffer size for the viewport.
     int fb_width, fb_height;
     glfwGetFramebufferSize(*window, &fb_width, &fb_height);
+    CHECK_GT(fb_width, 0);
+    CHECK_GT(fb_height, 0);
 
     // Resize HDR target if needed
     if (fb_width != hdr_target.width || fb_height != hdr_target.height) {

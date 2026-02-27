@@ -23,6 +23,9 @@ ShaderProgram CreateLightCullProgram() {
 }
 
 TileLightListList CreateTileLightList(uint32_t width, uint32_t height) {
+  CHECK_GT(width, 0);
+  CHECK_GT(height, 0);
+
   TileLightListList result;
   result.screen_width = width;
   result.screen_height = height;
