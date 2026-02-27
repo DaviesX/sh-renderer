@@ -9,24 +9,26 @@ uniform vec3 u_camera_pos;
 uniform vec3 u_sun_direction;
 
 uniform vec3 u_sky_color;
+uniform float u_sun_intensity;
 
-vec3 PreethamSky(vec3 viewDir, vec3 sunDir) {
-  float cosTheta = max(viewDir.y, 0.0);
-  float cosGamma = dot(viewDir, sunDir);
+vec3 PreethamSky(vec3 view_dir, vec3 sun_dir) {
+  float cos_theta = max(view_dir.y, 0.0);
+  float cos_gamma = dot(view_dir, sun_dir);
 
   // Rayleigh
   vec3 rayleigh = u_sky_color;
   // Gradient based on zenith
-  rayleigh *= (1.0 + 2.0 * cosTheta);
+  rayleigh *= (1.0 + 2.0 * cos_theta);
 
   // Mie (Sun halo)
-  float mie = pow(max(0.0, cosGamma), 100.0) * 0.5;
+  float mie = pow(max(0.0, cos_gamma), 100.0) * 0.5;
 
   // Sun disk
-  float sunUtils = step(0.9995, cosGamma);  // Small disk
+  float in_sun_disk = smoothstep(0.9995, 0.99975, cos_gamma);
 
-  vec3 skyColor = rayleigh * 0.5 + vec3(mie) + vec3(sunUtils) * 20.0;
-  return skyColor;
+  vec3 sky_ambient = (rayleigh * 0.5 + vec3(mie)) * (u_sun_intensity * 0.02);
+  vec3 sun = vec3(in_sun_disk) * u_sun_intensity;
+  return sky_ambient + sun;
 }
 
 void main() {

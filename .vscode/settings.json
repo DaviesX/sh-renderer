@@ -4,5 +4,6 @@
     "editor.formatOnSave": true,
     "files.associations": {
         "*.gltf": "json"
-    }
+    },
+    "terminal.integrated.defaultProfile.linux": "bash (2)"
 }

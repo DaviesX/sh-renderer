@@ -281,6 +281,87 @@ void UploadSceneToGPU(Scene& scene) {
   }
 }
 
+float ComputeLightRadius(float intensity, const Eigen::Vector3f& color,
+                         float threshold) {
+  float flux = intensity * color.maxCoeff();
+  if (flux <= 0.0f || threshold <= 0.0f) return 0.0f;
+  return std::sqrt(flux / threshold);
+}
+
+void UploadLightsToGPU(Scene& scene) {
+  // Point lights.
+  {
+    uint32_t count = static_cast<uint32_t>(scene.point_lights.size());
+
+    // Header: uint32_t count, padded to 16 bytes for std430 vec4 alignment.
+    size_t header_size = 16;
+    size_t data_size = header_size + count * sizeof(GpuPointLight);
+
+    std::vector<uint8_t> buffer(data_size, 0);
+    std::memcpy(buffer.data(), &count, sizeof(uint32_t));
+
+    auto* gpu_lights =
+        reinterpret_cast<GpuPointLight*>(buffer.data() + header_size);
+    for (uint32_t i = 0; i < count; ++i) {
+      const auto& l = scene.point_lights[i];
+      gpu_lights[i].position[0] = l.position.x();
+      gpu_lights[i].position[1] = l.position.y();
+      gpu_lights[i].position[2] = l.position.z();
+      gpu_lights[i].radius = l.radius;
+      gpu_lights[i].color[0] = l.color.x();
+      gpu_lights[i].color[1] = l.color.y();
+      gpu_lights[i].color[2] = l.color.z();
+      gpu_lights[i].intensity = l.intensity;
+    }
+
+    if (scene.point_light_list_ssbo.id != 0) {
+      DestroySSBO(scene.point_light_list_ssbo);
+    }
+    scene.point_light_list_ssbo = CreateSSBO(buffer.data(), data_size);
+  }
+
+  // Spot lights.
+  {
+    uint32_t count = static_cast<uint32_t>(scene.spot_lights.size());
+
+    size_t header_size = 16;
+    size_t data_size = header_size + count * sizeof(GpuSpotLight);
+
+    std::vector<uint8_t> buffer(data_size, 0);
+    std::memcpy(buffer.data(), &count, sizeof(uint32_t));
+
+    auto* gpu_lights =
+        reinterpret_cast<GpuSpotLight*>(buffer.data() + header_size);
+    for (uint32_t i = 0; i < count; ++i) {
+      const auto& l = scene.spot_lights[i];
+      gpu_lights[i].position[0] = l.position.x();
+      gpu_lights[i].position[1] = l.position.y();
+      gpu_lights[i].position[2] = l.position.z();
+      gpu_lights[i].radius = l.radius;
+      gpu_lights[i].direction[0] = l.direction.x();
+      gpu_lights[i].direction[1] = l.direction.y();
+      gpu_lights[i].direction[2] = l.direction.z();
+      gpu_lights[i].intensity = l.intensity;
+      gpu_lights[i].color[0] = l.color.x();
+      gpu_lights[i].color[1] = l.color.y();
+      gpu_lights[i].color[2] = l.color.z();
+      gpu_lights[i].cos_inner_cone = l.cos_inner_cone;
+      gpu_lights[i].cos_outer_cone = l.cos_outer_cone;
+      gpu_lights[i]._pad[0] = 0.0f;
+      gpu_lights[i]._pad[1] = 0.0f;
+      gpu_lights[i]._pad[2] = 0.0f;
+    }
+
+    if (scene.spot_light_list_ssbo.id != 0) {
+      DestroySSBO(scene.spot_light_list_ssbo);
+    }
+    scene.spot_light_list_ssbo = CreateSSBO(buffer.data(), data_size);
+  }
+
+  LOG(INFO) << "Uploaded " << scene.point_lights.size() << " point lights and "
+            << scene.spot_lights.size() << " spot lights to GPU SSBOs.";
+}
+
 // ... Existing functions ...
 std::vector<Eigen::Vector3f> TransformedVertices(const Geometry& geometry) {
   std::vector<Eigen::Vector3f> out;

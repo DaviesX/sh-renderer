@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <string>
 
+#include "compute_light_tile.h"
 #include "draw_depth.h"
 #include "draw_radiance.h"
 #include "draw_shadow_map.h"
@@ -47,6 +48,7 @@ void Run(const std::filesystem::path& scene_path) {
   }
 
   UploadSceneToGPU(*scene);
+  UploadLightsToGPU(*scene);
 
   ShaderProgram cascaded_shadow_map_opaque_program =
       CreateShadowMapOpaqueProgram();
@@ -59,11 +61,13 @@ void Run(const std::filesystem::path& scene_path) {
   ShaderProgram radiance_program = CreateRadianceProgram();
   ShaderProgram sky_program = CreateSkyAnalyticProgram();
   ShaderProgram tonemap_program = CreateTonemapProgram();
+  ShaderProgram light_cull_program = CreateLightCullProgram();
 
   if (!cascaded_shadow_map_opaque_program ||
       !cascaded_shadow_map_cutout_program || !depth_opaque_program ||
       !depth_cutout_program || !depth_vis_program || !shadow_vis_program ||
-      !radiance_program || !sky_program || !tonemap_program) {
+      !radiance_program || !sky_program || !tonemap_program ||
+      !light_cull_program) {
     LOG(ERROR) << "Failed to create shader programs.";
     return;
   }
@@ -74,6 +78,8 @@ void Run(const std::filesystem::path& scene_path) {
   RenderTarget hdr_target = CreateHDRTarget(initial_width, initial_height);
   std::vector<RenderTarget> sun_shadow_map_targets =
       CreateCascadedShadowMapTargets();
+  TileLightListList tile_light_list =
+      CreateTileLightList(initial_width, initial_height);
 
   InputState input_state;
   InteractionState interaction_state;
@@ -92,6 +98,8 @@ void Run(const std::filesystem::path& scene_path) {
     // Get the current framebuffer size for the viewport.
     int fb_width, fb_height;
     glfwGetFramebufferSize(*window, &fb_width, &fb_height);
+    CHECK_GT(fb_width, 0);
+    CHECK_GT(fb_height, 0);
 
     // Resize HDR target if needed
     if (fb_width != hdr_target.width || fb_height != hdr_target.height) {
@@ -125,10 +133,14 @@ void Run(const std::filesystem::path& scene_path) {
 
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
+    // 1.5. Compute Light Culling (Forward+)
+    ComputeTileLightList(camera, hdr_target, *scene, light_cull_program,
+                         &tile_light_list);
+
     // 2. Radiance Pass (Forward PBR)
     // DrawRadiance will handle clearing color, setting LEQUAL, etc.
     DrawSceneRadiance(*scene, camera, sun_shadow_map_targets, sun_cascades,
-                      radiance_program, hdr_target);
+                      tile_light_list, radiance_program, hdr_target);
 
     SunLight default_sun;
     default_sun.direction = Eigen::Vector3f(0.5f, -1.0f, 0.1f).normalized();
@@ -165,6 +177,7 @@ void Run(const std::filesystem::path& scene_path) {
     glDeleteFramebuffers(1, &target.fbo);
     glDeleteTextures(1, &target.depth_buffer);
   }
+  DestroyTileLightList(&tile_light_list);
 }
 
 }  // namespace sh_renderer

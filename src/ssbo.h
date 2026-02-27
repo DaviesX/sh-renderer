@@ -8,7 +8,8 @@ namespace sh_renderer {
 // TODO: Document the interface. Adjust the interface if needed.
 
 struct SSBO {
-  uint32_t id;
+  uint32_t id = 0;
+  size_t size = 0;
 };
 
 SSBO CreateSSBO(const void *data, size_t size);

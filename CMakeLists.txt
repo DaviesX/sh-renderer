@@ -68,6 +68,7 @@ target_include_directories(tinyexr INTERFACE ${TINYEXR_INCLUDE_DIR})
 set(LIB_SOURCES 
     src/camera.cpp
     src/cascade.cpp
+    src/compute_light_tile.cpp
     src/draw_depth.cpp
     src/draw_radiance.cpp
     src/draw_shadow_map.cpp
@@ -81,12 +82,14 @@ set(LIB_SOURCES
     src/render_target.cpp
     src/scene.cpp
     src/shader.cpp
+    src/ssbo.cpp
     src/window.cpp)
 
 set(LIB_HEADERS
     src/camera.h
     src/cascade.h
     src/colorspace.h
+    src/compute_light_tile.h
     src/draw_depth.h
     src/draw_radiance.h
     src/draw_shadow_map.h
@@ -98,6 +101,7 @@ set(LIB_HEADERS
     src/render_target.h
     src/scene.h
     src/shader.h
+    src/ssbo.h
     src/window.h)
 
 add_library(sh_renderer SHARED ${LIB_SOURCES} ${LIB_HEADERS})

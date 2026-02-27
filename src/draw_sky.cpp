@@ -47,6 +47,7 @@ void DrawSkyAnalytic(const Scene& scene, const Camera& camera,
                   GetViewProjMatrix(camera).inverse().eval());
   program.Uniform("u_camera_pos", camera.position);
   program.Uniform("u_sun_direction", sun_light.direction);
+  program.Uniform("u_sun_intensity", sun_light.intensity);
   program.Uniform("u_sky_color", kSkyColor);
 
   // Draw fullscreen triangle

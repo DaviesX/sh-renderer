@@ -538,6 +538,10 @@ void ProcessPunctualLight(const tinygltf::Model& model,
     l.position = position;
     l.color = color;
     l.intensity = intensity;
+    l.radius = ComputeLightRadius(intensity, color);
+    if (light_obj.Has("range")) {
+      l.radius = static_cast<float>(light_obj.Get("range").Get<double>());
+    }
     scene->point_lights.push_back(std::move(l));
   } else if (type_str == "directional") {
     SunLight l;
@@ -563,6 +567,10 @@ void ProcessPunctualLight(const tinygltf::Model& model,
             static_cast<float>(spot.Get("outerConeAngle").Get<double>());
         l.cos_outer_cone = std::cos(outer_cone_angle);
       }
+    }
+    l.radius = ComputeLightRadius(intensity, color);
+    if (light_obj.Has("range")) {
+      l.radius = static_cast<float>(light_obj.Get("range").Get<double>());
     }
     scene->spot_lights.push_back(std::move(l));
   }
