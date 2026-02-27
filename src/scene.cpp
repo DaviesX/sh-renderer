@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "camera.h"
 #include "glad.h"
 
 namespace sh_renderer {
@@ -347,9 +348,18 @@ void UploadLightsToGPU(Scene& scene) {
       gpu_lights[i].color[2] = l.color.z();
       gpu_lights[i].cos_inner_cone = l.cos_inner_cone;
       gpu_lights[i].cos_outer_cone = l.cos_outer_cone;
+      gpu_lights[i].has_shadow = l.has_shadow;
+      gpu_lights[i].shadow_uv_offset[0] = l.shadow_uv_offset.x();
+      gpu_lights[i].shadow_uv_offset[1] = l.shadow_uv_offset.y();
+      gpu_lights[i].shadow_uv_scale[0] = l.shadow_uv_scale.x();
+      gpu_lights[i].shadow_uv_scale[1] = l.shadow_uv_scale.y();
       gpu_lights[i]._pad[0] = 0.0f;
       gpu_lights[i]._pad[1] = 0.0f;
-      gpu_lights[i]._pad[2] = 0.0f;
+
+      const float* mat_data = l.shadow_view_proj.data();
+      for (int m = 0; m < 16; ++m) {
+        gpu_lights[i].shadow_view_proj[m] = mat_data[m];
+      }
     }
 
     if (scene.spot_light_list_ssbo.id != 0) {
@@ -358,8 +368,112 @@ void UploadLightsToGPU(Scene& scene) {
     scene.spot_light_list_ssbo = CreateSSBO(buffer.data(), data_size);
   }
 
-  LOG(INFO) << "Uploaded " << scene.point_lights.size() << " point lights and "
-            << scene.spot_lights.size() << " spot lights to GPU SSBOs.";
+  // LOG(INFO) << "Uploaded " << scene.point_lights.size() << " point lights and
+  // "
+  //           << scene.spot_lights.size() << " spot lights to GPU SSBOs.";
+}
+
+void RankAndAssignShadowMapLayers(Scene& scene, const Camera& camera) {
+  Eigen::Matrix4f view_proj = GetViewProjMatrix(camera);
+
+  // Extract 6 frustum planes from view_proj matrix.
+  // Planes are in form (A, B, C, D) where Ax + By + Cz + D = 0.
+  // Each row i corresponds to mat[i].
+  Eigen::Vector4f planes[6];
+  // Left
+  planes[0] = view_proj.row(3) + view_proj.row(0);
+  // Right
+  planes[1] = view_proj.row(3) - view_proj.row(0);
+  // Bottom
+  planes[2] = view_proj.row(3) + view_proj.row(1);
+  // Top
+  planes[3] = view_proj.row(3) - view_proj.row(1);
+  // Near
+  planes[4] = view_proj.row(3) + view_proj.row(2);
+  // Far
+  planes[5] = view_proj.row(3) - view_proj.row(2);
+
+  for (int i = 0; i < 6; ++i) {
+    planes[i].normalize();
+  }
+
+  // Struct for sorting.
+  struct LightRank {
+    int index;
+    float importance;
+  };
+  std::vector<LightRank> ranked_lights;
+
+  for (size_t i = 0; i < scene.spot_lights.size(); ++i) {
+    auto& light = scene.spot_lights[i];
+    light.has_shadow = 0;  // Reset.
+
+    // Frustum culling (sphere vs planes)
+    bool in_frustum = true;
+    for (int p = 0; p < 6; ++p) {
+      float dist = planes[p].x() * light.position.x() +
+                   planes[p].y() * light.position.y() +
+                   planes[p].z() * light.position.z() + planes[p].w();
+      if (dist < -light.radius) {
+        in_frustum = false;
+        break;
+      }
+    }
+
+    if (!in_frustum) continue;
+
+    // Rank by flux / distance^2. If distance is very small, cap it.
+    float dist = (light.position - camera.position).norm();
+    dist = std::max(dist, 0.1f);
+    float flux = light.intensity * light.color.maxCoeff();
+    float importance = flux / (dist * dist);
+
+    ranked_lights.push_back({static_cast<int>(i), importance});
+  }
+
+  // Sort by highest importance.
+  std::sort(ranked_lights.begin(), ranked_lights.end(),
+            [](const LightRank& a, const LightRank& b) {
+              return a.importance > b.importance;
+            });
+
+  // Log top ranking.
+  for (size_t rank = 0; rank < ranked_lights.size() && rank < 22; ++rank) {
+    int idx = ranked_lights[rank].index;
+    auto& light = scene.spot_lights[idx];
+
+    // Atlas Size: 2048
+    float size = 0.0f;
+    Eigen::Vector2f offset(0.0f, 0.0f);
+
+    if (rank < 2) {
+      size = 1024.0f;
+      offset.x() = rank * 1024.0f;
+      offset.y() = 0.0f;
+    } else if (rank < 6) {
+      size = 512.0f;
+      int r2 = rank - 2;
+      offset.x() = (r2 % 2) * 512.0f;
+      offset.y() = 1024.0f + std::floor(r2 / 2.0f) * 512.0f;
+    } else if (rank < 22) {
+      size = 256.0f;
+      int r16 = rank - 6;
+      offset.x() = 1024.0f + (r16 % 4) * 256.0f;
+      offset.y() = 1024.0f + std::floor(r16 / 4.0f) * 256.0f;
+    }
+
+    if (size > 0.0f) {
+      light.has_shadow = 1;
+      light.shadow_uv_offset = offset / 2048.0f;
+      light.shadow_uv_scale = Eigen::Vector2f(size, size) / 2048.0f;
+
+      // Debug log (can be slow, but useful)
+      // LOG(INFO) << "Assigned shadow to Spotlight " << idx << " Rank " << rank
+      //           << " Importance: " << ranked_lights[rank].importance
+      //           << " atlas_offset: " << offset.transpose() << " size: " <<
+      //           size;
+    }
+  }
 }
 
 // ... Existing functions ...

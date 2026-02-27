@@ -48,7 +48,6 @@ void Run(const std::filesystem::path& scene_path) {
   }
 
   UploadSceneToGPU(*scene);
-  UploadLightsToGPU(*scene);
 
   ShaderProgram cascaded_shadow_map_opaque_program =
       CreateShadowMapOpaqueProgram();
@@ -78,6 +77,8 @@ void Run(const std::filesystem::path& scene_path) {
   RenderTarget hdr_target = CreateHDRTarget(initial_width, initial_height);
   std::vector<RenderTarget> sun_shadow_map_targets =
       CreateCascadedShadowMapTargets();
+  RenderTarget spot_shadow_atlas =
+      CreateShadowAtlasTarget(scene->shadow_atlas.resolution);
   TileLightListList tile_light_list =
       CreateTileLightList(initial_width, initial_height);
 
@@ -114,6 +115,13 @@ void Run(const std::filesystem::path& scene_path) {
     // Enable depth testing.
     glEnable(GL_DEPTH_TEST);
 
+    // 0. Update dynamic light data and render shadow atlas
+    RankAndAssignShadowMapLayers(*scene, camera);
+    UploadLightsToGPU(*scene);
+
+    DrawShadowAtlas(*scene, cascaded_shadow_map_opaque_program,
+                    cascaded_shadow_map_cutout_program, spot_shadow_atlas);
+
     // 1. Depth Pre-pass
     // Bind HDR target but disable color writes
     glBindFramebuffer(GL_FRAMEBUFFER, hdr_target.fbo);
@@ -140,7 +148,8 @@ void Run(const std::filesystem::path& scene_path) {
     // 2. Radiance Pass (Forward PBR)
     // DrawRadiance will handle clearing color, setting LEQUAL, etc.
     DrawSceneRadiance(*scene, camera, sun_shadow_map_targets, sun_cascades,
-                      tile_light_list, radiance_program, hdr_target);
+                      spot_shadow_atlas, tile_light_list, radiance_program,
+                      hdr_target);
 
     SunLight default_sun;
     default_sun.direction = Eigen::Vector3f(0.5f, -1.0f, 0.1f).normalized();
@@ -177,6 +186,8 @@ void Run(const std::filesystem::path& scene_path) {
     glDeleteFramebuffers(1, &target.fbo);
     glDeleteTextures(1, &target.depth_buffer);
   }
+  glDeleteFramebuffers(1, &spot_shadow_atlas.fbo);
+  glDeleteTextures(1, &spot_shadow_atlas.depth_buffer);
   DestroyTileLightList(&tile_light_list);
 }
 

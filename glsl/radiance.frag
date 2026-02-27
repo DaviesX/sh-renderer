@@ -37,6 +37,7 @@ layout(binding = 3) uniform sampler2D u_emissive_texture;
 layout(binding = 8) uniform sampler2D u_PackedTex0;
 layout(binding = 9) uniform sampler2D u_PackedTex1;
 layout(binding = 10) uniform sampler2D u_PackedTex2;
+layout(binding = 11) uniform sampler2DShadow u_spot_shadow_atlas;
 
 uniform vec3 u_emissive_factor;
 uniform float u_emissive_strength;
@@ -63,7 +64,11 @@ struct GpuSpotLight {
   vec3 color;
   float cos_inner_cone;
   float cos_outer_cone;
-  float pad0[3];
+  int has_shadow;
+  vec2 shadow_uv_offset;
+  vec2 shadow_uv_scale;
+  float pad0[2];
+  mat4 shadow_view_proj;
 };
 
 layout(std430, binding = 0) readonly buffer PointLightBuffer {
@@ -79,7 +84,8 @@ layout(std430, binding = 1) readonly buffer SpotLightBuffer {
 };
 
 layout(std430, binding = 2) readonly buffer TileLightIndexBuffer {
-  uint tile_data[];  // Header: [offset, count] per tile, then light indices.
+  uint tile_data[];  // Header: [offset, p_count, s_count] per tile, then light
+                     // indices.
 };
 
 const float PI = 3.14159265359;
@@ -403,78 +409,105 @@ void main() {
                                         indirect_reflection_radiance, f0,
                                         albedo, metallic, roughness, occlusion);
 
-  // Direct incoming radiance
-  float sun_visibility = ComputeShadow(v_world_pos, normal_world, angles);
-  vec3 direct_radiance = u_sun.color * u_sun.intensity * sun_visibility;
-
-  // PBR Calculation
-  vec3 direct_brdf =
-      ComputeDirectBRDF(angles, f0, albedo, metallic, roughness, occlusion);
-  vec3 l_direct = direct_brdf * angles.n_dot_l * direct_radiance;
-
   // Emission
   vec3 l_emission = u_emissive_strength * u_emissive_factor;
   if (u_has_emissive_texture > 0) {
     l_emission *= texture(u_emissive_texture, v_uv).rgb;
   }
 
-  // --- Forward+ Local Lights ---
+  // Direct lighting (forward+).
+  vec3 l_direct = vec3(0.0);
+
+  // Direct sun.
+  float sun_visibility = ComputeShadow(v_world_pos, normal_world, angles);
+  vec3 sun_incoming = u_sun.color * u_sun.intensity * sun_visibility;
+  vec3 direct_sun_brdf =
+      ComputeDirectBRDF(angles, f0, albedo, metallic, roughness, occlusion);
+  l_direct += direct_sun_brdf * angles.n_dot_l * sun_incoming;
+
+  // Point and spot lights.
   ivec2 tile_id = ivec2(gl_FragCoord.xy) / 16;
   // Clamp tile_id to valid range.
   tile_id = clamp(tile_id, ivec2(0), u_tile_count - 1);
   uint tile_flat = uint(tile_id.y * u_tile_count.x + tile_id.x);
 
-  uint tile_offset = tile_data[tile_flat * 2 + 0];
-  uint tile_count = tile_data[tile_flat * 2 + 1];
+  uint tile_offset = tile_data[tile_flat * 3 + 0];
+  uint p_count = tile_data[tile_flat * 3 + 1];
+  uint s_count = tile_data[tile_flat * 3 + 2];
 
-  for (uint i = 0; i < tile_count; ++i) {
-    uint packed_index = tile_data[tile_offset + i];
-    bool is_spot = (packed_index & (1u << 31)) != 0;
-    uint light_idx = packed_index & 0x7FFFFFFFu;
+  // Point lights.
+  for (uint i = 0; i < p_count; ++i) {
+    uint light_idx = tile_data[tile_offset + i];
+    GpuPointLight pl = gpu_point_lights[light_idx];
+    vec3 to_light = pl.position - v_world_pos;
+    float dist = length(to_light);
 
-    if (!is_spot) {
-      // Point light.
-      GpuPointLight pl = gpu_point_lights[light_idx];
-      vec3 to_light = pl.position - v_world_pos;
-      float dist = length(to_light);
+    if (dist < 0.005) {
+      continue;
+    }
+    vec3 L = to_light / dist;
+    vec3 H = normalize(view_dir + L);
+    ShadingAngles local_angles =
+        ComputeShadingAngles(normal_world, view_dir, L, H);
 
-      if (dist > 0.001) {
-        vec3 L = to_light / dist;
-        vec3 H = normalize(view_dir + L);
-        ShadingAngles local_angles =
-            ComputeShadingAngles(normal_world, view_dir, L, H);
+    vec3 incoming = pl.color * pl.intensity / (dist * dist);
 
-        vec3 incoming = pl.color * pl.intensity / (dist * dist);
+    vec3 brdf = ComputeDirectBRDF(local_angles, f0, albedo, metallic, roughness,
+                                  occlusion);
+    l_direct += brdf * local_angles.n_dot_l * incoming;
+  }
 
-        vec3 brdf = ComputeDirectBRDF(local_angles, f0, albedo, metallic,
-                                      roughness, occlusion);
-        l_direct += brdf * local_angles.n_dot_l * incoming;
-      }
-    } else {
-      // Spot light.
-      GpuSpotLight sl = gpu_spot_lights[light_idx];
-      vec3 to_light = sl.position - v_world_pos;
-      float dist = length(to_light);
+  // Spot lights.
+  for (uint i = 0; i < s_count; ++i) {
+    uint light_idx = tile_data[tile_offset + p_count + i];
+    GpuSpotLight sl = gpu_spot_lights[light_idx];
+    vec3 to_light = sl.position - v_world_pos;
+    float dist = length(to_light);
 
-      if (dist > 0.001) {
-        vec3 L = to_light / dist;
-        float cos_angle = dot(-L, sl.direction);
+    if (dist < 0.005) {
+      continue;
+    }
+    vec3 L = to_light / dist;
+    float cos_angle = dot(-L, sl.direction);
 
-        // Angular falloff.
-        float spot_effect =
-            smoothstep(sl.cos_outer_cone, sl.cos_inner_cone, cos_angle);
-        if (spot_effect > 0.0) {
-          vec3 H = normalize(view_dir + L);
-          ShadingAngles local_angles =
-              ComputeShadingAngles(normal_world, view_dir, L, H);
+    // Angular falloff.
+    float spot_effect =
+        smoothstep(sl.cos_outer_cone, sl.cos_inner_cone, cos_angle);
+    if (spot_effect > 0.0) {
+      vec3 H = normalize(view_dir + L);
+      ShadingAngles local_angles =
+          ComputeShadingAngles(normal_world, view_dir, L, H);
 
-          vec3 incoming = sl.color * sl.intensity * spot_effect / (dist * dist);
+      float shadow = 1.0;
+      if (sl.has_shadow > 0) {
+        const float normal_bias_scale = 0.02;
+        vec3 biased_world_pos = v_world_pos + normal_world *
+                                                  (1.0 - local_angles.n_dot_l) *
+                                                  normal_bias_scale;
 
-          vec3 brdf = ComputeDirectBRDF(local_angles, f0, albedo, metallic,
-                                        roughness, occlusion);
-          l_direct += brdf * local_angles.n_dot_l * incoming;
+        vec4 frag_pos_light_space =
+            sl.shadow_view_proj * vec4(biased_world_pos, 1.0);
+        vec3 proj_coords = frag_pos_light_space.xyz / frag_pos_light_space.w;
+        proj_coords = proj_coords * 0.5 + 0.5;
+
+        if (proj_coords.z >= 0.0 && proj_coords.z <= 1.0 &&
+            proj_coords.x >= 0.0 && proj_coords.x <= 1.0 &&
+            proj_coords.y >= 0.0 && proj_coords.y <= 1.0) {
+          vec2 shadow_uv =
+              proj_coords.xy * sl.shadow_uv_scale + sl.shadow_uv_offset;
+          float texel_size = 1.0 / 2048.0;
+          shadow =
+              PCFPoissonDisk9(u_spot_shadow_atlas,
+                              vec3(shadow_uv, proj_coords.z), texel_size, 1.0);
         }
       }
+
+      vec3 incoming =
+          sl.color * sl.intensity * spot_effect * shadow / (dist * dist);
+
+      vec3 brdf = ComputeDirectBRDF(local_angles, f0, albedo, metallic,
+                                    roughness, occlusion);
+      l_direct += brdf * local_angles.n_dot_l * incoming;
     }
   }
 
