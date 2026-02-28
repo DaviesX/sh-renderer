@@ -232,29 +232,44 @@ float PCFPoissonDisk9(sampler2DShadow shadow_map, vec3 shadow_coord,
 }
 
 // --- Shadow Calculation ---
-float ComputeShadow(vec3 world_pos, vec3 normal, ShadingAngles angles) {
-  vec4 viewPos = u_view * vec4(world_pos, 1.0);
-  float viewDepth = abs(viewPos.z);
+float ComputeShadow(vec3 world_pos, vec3 normal, ShadingAngles angles,
+                    mat4 to_light_space, sampler2DShadow shadow_map,
+                    vec2 uv_scale, vec2 uv_offset, float penumbra) {
+  const float normal_bias_scale = 0.01;
+  vec3 biased_world_pos =
+      world_pos + normal * (1.0 - angles.n_dot_l) * normal_bias_scale;
+  vec4 frag_pos_light_space = to_light_space * vec4(biased_world_pos, 1.0);
+  vec3 proj_coords = frag_pos_light_space.xyz / frag_pos_light_space.w;
+  proj_coords = proj_coords * 0.5 + 0.5;
+  if (proj_coords.z < 0.0 || proj_coords.z > 1.0 || proj_coords.x < 0.0 ||
+      proj_coords.x > 1.0 || proj_coords.y < 0.0 || proj_coords.y > 1.0) {
+    return 1.0;
+  }
+
+  float bias =
+      0.001 * (sqrt(1.0 - angles.n_dot_l * angles.n_dot_l) / angles.n_dot_l);
+  bias = clamp(bias, 0.0, 0.005);
+
+  float texel_size = 1.0 / float(textureSize(shadow_map, 0).x);
+  vec3 compare_coord =
+      vec3(uv_scale * proj_coords.xy + uv_offset, proj_coords.z - bias);
+  float shadow =
+      PCFPoissonDisk9(shadow_map, compare_coord, texel_size, penumbra);
+  return shadow;
+}
+
+float ComputeSunShadow(vec3 world_pos, vec3 normal, ShadingAngles angles) {
+  vec4 view_pos = u_view * vec4(world_pos, 1.0);
+  float view_depth = abs(view_pos.z);
 
   int layer = 0;
   for (int i = 0; i < NUM_CASCADES - 1; ++i) {
-    layer += int(viewDepth >= u_sun_cascade_splits[i]);
+    layer += int(view_depth >= u_sun_cascade_splits[i]);
   }
 
-  const float normal_bias_scale = 0.02;
-  vec3 biased_world_pos =
-      world_pos + normal * (1.0 - angles.n_dot_l) * normal_bias_scale;
-  vec4 frag_pos_light_space =
-      u_sun_cascade_view_projections[layer] * vec4(biased_world_pos, 1.0);
-  vec3 proj_coords = (frag_pos_light_space.xyz) / frag_pos_light_space.w;
-  proj_coords = proj_coords * 0.5 + 0.5;
-
-  float texel_size = 1.0 / float(textureSize(u_sun_shadow_maps[layer], 0).x);
-  vec3 compare_coord = vec3(proj_coords.xy, proj_coords.z);
-  float shadow = PCFPoissonDisk9(u_sun_shadow_maps[layer], compare_coord,
-                                 texel_size, 1.5 / float(layer + 1));
-
-  return shadow;
+  return ComputeShadow(
+      world_pos, normal, angles, u_sun_cascade_view_projections[layer],
+      u_sun_shadow_maps[layer], vec2(1.0), vec2(0.0), 2.5 / float(layer + 1));
 }
 
 // --- SH Irradiance ---
@@ -419,7 +434,7 @@ void main() {
   vec3 l_direct = vec3(0.0);
 
   // Direct sun.
-  float sun_visibility = ComputeShadow(v_world_pos, normal_world, angles);
+  float sun_visibility = ComputeSunShadow(v_world_pos, normal_world, angles);
   vec3 sun_incoming = u_sun.color * u_sun.intensity * sun_visibility;
   vec3 direct_sun_brdf =
       ComputeDirectBRDF(angles, f0, albedo, metallic, roughness, occlusion);
@@ -480,26 +495,9 @@ void main() {
 
       float shadow = 1.0;
       if (sl.has_shadow > 0) {
-        const float normal_bias_scale = 0.02;
-        vec3 biased_world_pos = v_world_pos + normal_world *
-                                                  (1.0 - local_angles.n_dot_l) *
-                                                  normal_bias_scale;
-
-        vec4 frag_pos_light_space =
-            sl.shadow_view_proj * vec4(biased_world_pos, 1.0);
-        vec3 proj_coords = frag_pos_light_space.xyz / frag_pos_light_space.w;
-        proj_coords = proj_coords * 0.5 + 0.5;
-
-        if (proj_coords.z >= 0.0 && proj_coords.z <= 1.0 &&
-            proj_coords.x >= 0.0 && proj_coords.x <= 1.0 &&
-            proj_coords.y >= 0.0 && proj_coords.y <= 1.0) {
-          vec2 shadow_uv =
-              proj_coords.xy * sl.shadow_uv_scale + sl.shadow_uv_offset;
-          float texel_size = 1.0 / 2048.0;
-          shadow =
-              PCFPoissonDisk9(u_spot_shadow_atlas,
-                              vec3(shadow_uv, proj_coords.z), texel_size, 1.0);
-        }
+        shadow = ComputeShadow(v_world_pos, normal_world, local_angles,
+                               sl.shadow_view_proj, u_spot_shadow_atlas,
+                               sl.shadow_uv_scale, sl.shadow_uv_offset, 1.5);
       }
 
       vec3 incoming =

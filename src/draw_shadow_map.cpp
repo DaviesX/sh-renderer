@@ -135,6 +135,7 @@ void DrawCascadedShadowMap(
   // Disable Color mask
   glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
   glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
 
   std::vector<const Geometry*> opaque_geos;
   std::vector<const Geometry*> cutout_geos;
@@ -164,7 +165,6 @@ void DrawCascadedShadowMap(
     glViewport(0, 0, target.width, target.height);
     glClear(GL_DEPTH_BUFFER_BIT);
 
-    glCullFace(GL_FRONT);
     opaque_program.Use();
     opaque_program.Uniform("u_view_proj", cascade.view_projection_matrix);
     for (const Geometry* geo_ptr : opaque_geos) {
@@ -178,7 +178,6 @@ void DrawCascadedShadowMap(
       }
     }
 
-    glCullFace(GL_BACK);
     cutout_program.Use();
     cutout_program.Uniform("u_view_proj", cascade.view_projection_matrix);
     for (const Geometry* geo_ptr : cutout_geos) {
@@ -204,8 +203,6 @@ void DrawCascadedShadowMap(
   }
 
   // Restore state
-  glEnable(GL_CULL_FACE);
-  glCullFace(GL_BACK);
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
@@ -219,6 +216,7 @@ void DrawShadowAtlas(Scene& scene, const ShaderProgram& opaque_program,
   glDepthFunc(GL_LEQUAL);
   glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
   glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
 
   std::vector<const Geometry*> opaque_geos;
   std::vector<const Geometry*> cutout_geos;
@@ -285,7 +283,6 @@ void DrawShadowAtlas(Scene& scene, const ShaderProgram& opaque_program,
 
     light.shadow_view_proj = proj_matrix * view_matrix;
 
-    glCullFace(GL_FRONT);
     opaque_program.Use();
     opaque_program.Uniform("u_view_proj", light.shadow_view_proj);
     for (const Geometry* geo_ptr : opaque_geos) {
@@ -299,7 +296,6 @@ void DrawShadowAtlas(Scene& scene, const ShaderProgram& opaque_program,
       }
     }
 
-    glCullFace(GL_BACK);
     cutout_program.Use();
     cutout_program.Uniform("u_view_proj", light.shadow_view_proj);
     for (const Geometry* geo_ptr : cutout_geos) {
@@ -321,8 +317,6 @@ void DrawShadowAtlas(Scene& scene, const ShaderProgram& opaque_program,
     }
   }
 
-  glEnable(GL_CULL_FACE);
-  glCullFace(GL_BACK);
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }

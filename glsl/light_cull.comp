@@ -3,7 +3,7 @@
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 // --- Point Light SSBO (binding = 0) ---
-struct PointLight {
+struct GpuPointLight {
   vec3 position;
   float radius;
   vec3 color;
@@ -13,11 +13,11 @@ struct PointLight {
 layout(std430, binding = 0) readonly buffer PointLightBuffer {
   uint point_light_count;
   uint pad0[3];
-  PointLight point_lights[];
+  GpuPointLight point_lights[];
 };
 
 // --- Spot Light SSBO (binding = 1) ---
-struct SpotLight {
+struct GpuSpotLight {
   vec3 position;
   float radius;
   vec3 direction;
@@ -35,7 +35,7 @@ struct SpotLight {
 layout(std430, binding = 1) readonly buffer SpotLightBuffer {
   uint spot_light_count;
   uint pad2[3];
-  SpotLight spot_lights[];
+  GpuSpotLight spot_lights[];
 };
 
 // --- Tile Light Index List SSBO (binding = 2) ---

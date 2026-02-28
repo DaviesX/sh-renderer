@@ -315,10 +315,15 @@ void UploadLightsToGPU(Scene& scene) {
       gpu_lights[i].intensity = l.intensity;
     }
 
-    if (scene.point_light_list_ssbo.id != 0) {
-      DestroySSBO(scene.point_light_list_ssbo);
+    if (scene.point_light_list_ssbo.id != 0 &&
+        scene.point_light_list_ssbo.size >= data_size) {
+      UpdateSSBO(scene.point_light_list_ssbo, buffer.data(), data_size);
+    } else {
+      if (scene.point_light_list_ssbo.id != 0) {
+        DestroySSBO(scene.point_light_list_ssbo);
+      }
+      scene.point_light_list_ssbo = CreateSSBO(buffer.data(), data_size);
     }
-    scene.point_light_list_ssbo = CreateSSBO(buffer.data(), data_size);
   }
 
   // Spot lights.
@@ -362,18 +367,19 @@ void UploadLightsToGPU(Scene& scene) {
       }
     }
 
-    if (scene.spot_light_list_ssbo.id != 0) {
-      DestroySSBO(scene.spot_light_list_ssbo);
+    if (scene.spot_light_list_ssbo.id != 0 &&
+        scene.spot_light_list_ssbo.size >= data_size) {
+      UpdateSSBO(scene.spot_light_list_ssbo, buffer.data(), data_size);
+    } else {
+      if (scene.spot_light_list_ssbo.id != 0) {
+        DestroySSBO(scene.spot_light_list_ssbo);
+      }
+      scene.spot_light_list_ssbo = CreateSSBO(buffer.data(), data_size);
     }
-    scene.spot_light_list_ssbo = CreateSSBO(buffer.data(), data_size);
   }
-
-  // LOG(INFO) << "Uploaded " << scene.point_lights.size() << " point lights and
-  // "
-  //           << scene.spot_lights.size() << " spot lights to GPU SSBOs.";
 }
 
-void RankAndAssignShadowMapLayers(Scene& scene, const Camera& camera) {
+void AllocateShadowMapForLights(Scene& scene, const Camera& camera) {
   Eigen::Matrix4f view_proj = GetViewProjMatrix(camera);
 
   // Extract 6 frustum planes from view_proj matrix.
@@ -438,7 +444,7 @@ void RankAndAssignShadowMapLayers(Scene& scene, const Camera& camera) {
             });
 
   // Log top ranking.
-  for (size_t rank = 0; rank < ranked_lights.size() && rank < 22; ++rank) {
+  for (size_t rank = 0; rank < ranked_lights.size() && rank < 10; ++rank) {
     int idx = ranked_lights[rank].index;
     auto& light = scene.spot_lights[idx];
 
@@ -466,12 +472,6 @@ void RankAndAssignShadowMapLayers(Scene& scene, const Camera& camera) {
       light.has_shadow = 1;
       light.shadow_uv_offset = offset / 2048.0f;
       light.shadow_uv_scale = Eigen::Vector2f(size, size) / 2048.0f;
-
-      // Debug log (can be slow, but useful)
-      // LOG(INFO) << "Assigned shadow to Spotlight " << idx << " Rank " << rank
-      //           << " Importance: " << ranked_lights[rank].importance
-      //           << " atlas_offset: " << offset.transpose() << " size: " <<
-      //           size;
     }
   }
 }

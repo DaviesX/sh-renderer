@@ -209,7 +209,7 @@ void UploadLightsToGPU(Scene& scene);
 
 // Frustum cull spot lights against main camera, rank by form factor,
 // and allocate into the shadow atlas.
-void RankAndAssignShadowMapLayers(Scene& scene, const class Camera& camera);
+void AllocateShadowMapForLights(Scene& scene, const class Camera& camera);
 
 // Transforms the geometry by the transform matrix.
 std::vector<Eigen::Vector3f> TransformedVertices(const Geometry& geometry);

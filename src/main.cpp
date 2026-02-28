@@ -116,7 +116,7 @@ void Run(const std::filesystem::path& scene_path) {
     glEnable(GL_DEPTH_TEST);
 
     // 0. Update dynamic light data and render shadow atlas
-    RankAndAssignShadowMapLayers(*scene, camera);
+    AllocateShadowMapForLights(*scene, camera);
     UploadLightsToGPU(*scene);
 
     DrawShadowAtlas(*scene, cascaded_shadow_map_opaque_program,
