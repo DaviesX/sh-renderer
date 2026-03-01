@@ -117,6 +117,10 @@ struct SpotLight {
 
   // GL Resources
   int shadow_map_layer = -1;
+  int has_shadow = 0;
+  Eigen::Vector2f shadow_uv_offset = Eigen::Vector2f::Zero();
+  Eigen::Vector2f shadow_uv_scale = Eigen::Vector2f::Ones();
+  Eigen::Matrix4f shadow_view_proj = Eigen::Matrix4f::Identity();
 };
 
 struct SunLight {
@@ -138,6 +142,13 @@ struct AreaLight {
   const Geometry* geometry = nullptr;
 };
 
+// --- Shadow Atlas context ---
+struct ShadowAtlasContext {
+  uint32_t atlas_texture = 0;
+  uint32_t atlas_fbo = 0;
+  uint32_t resolution = 2048;
+};
+
 // --- Scene ---
 struct Scene {
   std::vector<Geometry> geometries;
@@ -154,6 +165,7 @@ struct Scene {
   // GL Resources
   SSBO point_light_list_ssbo;
   SSBO spot_light_list_ssbo;
+  ShadowAtlasContext shadow_atlas;
 };
 
 // GPU-side light structs (std430 layout).
@@ -174,9 +186,13 @@ struct GpuSpotLight {
   float color[3];
   float cos_inner_cone;
   float cos_outer_cone;
-  float _pad[3];
+  int has_shadow;
+  float shadow_uv_offset[2];
+  float shadow_uv_scale[2];
+  float _pad[2];
+  float shadow_view_proj[16];
 };
-static_assert(sizeof(GpuSpotLight) == 64);
+static_assert(sizeof(GpuSpotLight) == 144);
 
 // Computes the bounding radius of a light from its flux via inverse-square law.
 // radius = sqrt(flux / threshold), where flux = intensity * max(color).
@@ -190,6 +206,10 @@ void UploadSceneToGPU(Scene& scene);
 
 // Uploads the point and spot light lists to the GPU SSBOs.
 void UploadLightsToGPU(Scene& scene);
+
+// Frustum cull spot lights against main camera, rank by form factor,
+// and allocate into the shadow atlas.
+void AllocateShadowMapForLights(Scene& scene, const class Camera& camera);
 
 // Transforms the geometry by the transform matrix.
 std::vector<Eigen::Vector3f> TransformedVertices(const Geometry& geometry);

@@ -80,6 +80,42 @@ std::vector<RenderTarget> CreateCascadedShadowMapTargets() {
   return targets;
 }
 
+RenderTarget CreateShadowAtlasTarget(int size) {
+  RenderTarget target;
+  target.width = size;
+  target.height = size;
+
+  glCreateTextures(GL_TEXTURE_2D, 1, &target.depth_buffer);
+  glTextureStorage2D(target.depth_buffer, 1, GL_DEPTH_COMPONENT32F, size, size);
+
+  glTextureParameteri(target.depth_buffer, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTextureParameteri(target.depth_buffer, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTextureParameteri(target.depth_buffer, GL_TEXTURE_WRAP_S,
+                      GL_CLAMP_TO_BORDER);
+  glTextureParameteri(target.depth_buffer, GL_TEXTURE_WRAP_T,
+                      GL_CLAMP_TO_BORDER);
+  glTextureParameteri(target.depth_buffer, GL_TEXTURE_COMPARE_MODE,
+                      GL_COMPARE_REF_TO_TEXTURE);
+  glTextureParameteri(target.depth_buffer, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+
+  float border_color[] = {1.0f, 1.0f, 1.0f, 1.0f};
+  glTextureParameterfv(target.depth_buffer, GL_TEXTURE_BORDER_COLOR,
+                       border_color);
+
+  glCreateFramebuffers(1, &target.fbo);
+  glNamedFramebufferTexture(target.fbo, GL_DEPTH_ATTACHMENT,
+                            target.depth_buffer, 0);
+  glNamedFramebufferDrawBuffer(target.fbo, GL_NONE);
+  glNamedFramebufferReadBuffer(target.fbo, GL_NONE);
+
+  if (glCheckNamedFramebufferStatus(target.fbo, GL_FRAMEBUFFER) !=
+      GL_FRAMEBUFFER_COMPLETE) {
+    LOG(ERROR) << "Shadow atlas FBO is incomplete.";
+  }
+
+  return target;
+}
+
 void DrawCascadedShadowMap(
     const Scene& scene, const Camera& camera,
     const ShaderProgram& opaque_program, const ShaderProgram& cutout_program,
@@ -99,6 +135,7 @@ void DrawCascadedShadowMap(
   // Disable Color mask
   glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
   glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
 
   std::vector<const Geometry*> opaque_geos;
   std::vector<const Geometry*> cutout_geos;
@@ -128,7 +165,6 @@ void DrawCascadedShadowMap(
     glViewport(0, 0, target.width, target.height);
     glClear(GL_DEPTH_BUFFER_BIT);
 
-    glCullFace(GL_FRONT);
     opaque_program.Use();
     opaque_program.Uniform("u_view_proj", cascade.view_projection_matrix);
     for (const Geometry* geo_ptr : opaque_geos) {
@@ -142,7 +178,6 @@ void DrawCascadedShadowMap(
       }
     }
 
-    glCullFace(GL_BACK);
     cutout_program.Use();
     cutout_program.Uniform("u_view_proj", cascade.view_projection_matrix);
     for (const Geometry* geo_ptr : cutout_geos) {
@@ -167,9 +202,122 @@ void DrawCascadedShadowMap(
     }
   }
 
-  // Restore state
+  // Restore state.
+  glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void DrawShadowAtlas(Scene& scene, const ShaderProgram& opaque_program,
+                     const ShaderProgram& cutout_program,
+                     const RenderTarget& shadow_atlas) {
+  if (!opaque_program || !cutout_program) return;
+
+  glEnable(GL_DEPTH_TEST);
+  glDepthFunc(GL_LEQUAL);
+  glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
   glEnable(GL_CULL_FACE);
   glCullFace(GL_BACK);
+
+  std::vector<const Geometry*> opaque_geos;
+  std::vector<const Geometry*> cutout_geos;
+  opaque_geos.reserve(scene.geometries.size());
+  cutout_geos.reserve(scene.geometries.size());
+
+  for (const auto& geo : scene.geometries) {
+    if (geo.vao == 0) continue;
+    if (geo.material_id >= 0 &&
+        static_cast<size_t>(geo.material_id) < scene.materials.size()) {
+      const auto& mat = scene.materials[geo.material_id];
+      if (mat.alpha_cutout) {
+        cutout_geos.push_back(&geo);
+      } else {
+        opaque_geos.push_back(&geo);
+      }
+    } else {
+      opaque_geos.push_back(&geo);
+    }
+  }
+
+  glBindFramebuffer(GL_FRAMEBUFFER, shadow_atlas.fbo);
+  glViewport(0, 0, shadow_atlas.width, shadow_atlas.height);
+  glClear(GL_DEPTH_BUFFER_BIT);
+
+  for (auto& light : scene.spot_lights) {
+    if (!light.has_shadow) continue;
+
+    int vx = std::round(light.shadow_uv_offset.x() * shadow_atlas.width);
+    int vy = std::round(light.shadow_uv_offset.y() * shadow_atlas.height);
+    int vw = std::round(light.shadow_uv_scale.x() * shadow_atlas.width);
+    int vh = std::round(light.shadow_uv_scale.y() * shadow_atlas.height);
+    glViewport(vx, vy, vw, vh);
+
+    Eigen::Vector3f up = Eigen::Vector3f(0, 1, 0);
+    if (std::abs(light.direction.y()) > 0.999f) {
+      up = Eigen::Vector3f(1, 0, 0);
+    }
+
+    Eigen::Matrix3f R;
+    Eigen::Vector3f Z = -light.direction.normalized();
+    Eigen::Vector3f X = up.cross(Z).normalized();
+    Eigen::Vector3f Y = Z.cross(X).normalized();
+    R.col(0) = X;
+    R.col(1) = Y;
+    R.col(2) = Z;
+    Eigen::Matrix4f view_matrix = Eigen::Matrix4f::Identity();
+    view_matrix.block<3, 3>(0, 0) = R.transpose();
+    view_matrix.block<3, 1>(0, 3) = -R.transpose() * light.position;
+
+    float fov_y = 2.0f * std::acos(light.cos_outer_cone);
+    float aspect = 1.0f;
+    float z_near = 0.1f;
+    float z_far = light.radius;
+    if (z_far < z_near + 0.1f) z_far = z_near + 10.0f;
+
+    float f = 1.0f / std::tan(fov_y / 2.0f);
+    Eigen::Matrix4f proj_matrix = Eigen::Matrix4f::Zero();
+    proj_matrix(0, 0) = f / aspect;
+    proj_matrix(1, 1) = f;
+    proj_matrix(2, 2) = (z_near + z_far) / (z_near - z_far);
+    proj_matrix(2, 3) = (2.0f * z_far * z_near) / (z_near - z_far);
+    proj_matrix(3, 2) = -1.0f;
+
+    light.shadow_view_proj = proj_matrix * view_matrix;
+
+    opaque_program.Use();
+    opaque_program.Uniform("u_view_proj", light.shadow_view_proj);
+    for (const Geometry* geo_ptr : opaque_geos) {
+      const Geometry& geo = *geo_ptr;
+      opaque_program.Uniform("u_model", geo.transform.matrix());
+      glBindVertexArray(geo.vao);
+      if (geo.index_count > 0) {
+        glDrawElements(GL_TRIANGLES, geo.index_count, GL_UNSIGNED_INT, nullptr);
+      } else {
+        glDrawArrays(GL_TRIANGLES, 0, geo.vertices.size());
+      }
+    }
+
+    cutout_program.Use();
+    cutout_program.Uniform("u_view_proj", light.shadow_view_proj);
+    for (const Geometry* geo_ptr : cutout_geos) {
+      const Geometry& geo = *geo_ptr;
+      cutout_program.Uniform("u_model", geo.transform.matrix());
+      if (geo.material_id >= 0 &&
+          static_cast<size_t>(geo.material_id) < scene.materials.size()) {
+        const auto& mat = scene.materials[geo.material_id];
+        glBindTextureUnit(0, mat.albedo.texture_id);
+      } else {
+        glBindTextureUnit(0, 0);
+      }
+      glBindVertexArray(geo.vao);
+      if (geo.index_count > 0) {
+        glDrawElements(GL_TRIANGLES, geo.index_count, GL_UNSIGNED_INT, nullptr);
+      } else {
+        glDrawArrays(GL_TRIANGLES, 0, geo.vertices.size());
+      }
+    }
+  }
+
+  // Restore state.
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }

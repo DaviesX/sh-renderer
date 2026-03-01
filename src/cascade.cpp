@@ -56,7 +56,7 @@ std::vector<Cascade> ComputeCascades(const SunLight& sun_light,
   std::vector<Cascade> cascades;
   cascades.resize(kNumShadowMapCascades);
 
-  const float lambda = 0.86f;
+  const float lambda = 0.8f;
 
   std::vector<float> cascade_splits =
       CalculateCascadeSplits(camera.intrinsics.z_near, camera.intrinsics.z_far,
@@ -147,10 +147,8 @@ std::vector<Cascade> ComputeCascades(const SunLight& sun_light,
     float extent_y = (max_y - min_y) * 0.5f;
 
     // 2. Determine actual resolution for this cascade
-    float resolution = 1024.f;
-
-    float world_units_per_texel_x = (extent_x * 2.0f) / resolution;
-    float world_units_per_texel_y = (extent_y * 2.0f) / resolution;
+    float world_units_per_texel_x = (extent_x * 2.0f) / kCascadeShadowMapSize;
+    float world_units_per_texel_y = (extent_y * 2.0f) / kCascadeShadowMapSize;
 
     // 3. Snap the center to the texel grid
     center_x = std::floor(center_x / world_units_per_texel_x) *
