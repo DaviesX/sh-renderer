@@ -163,10 +163,10 @@ void main() {
 
     // Build 4 side planes (from origin to edges).
     // Left: origin, bottom-left, top-left (normals point inward).
-    s_frustum_planes[0] = CreatePlane(corners[3], corners[0]);  // Left
-    s_frustum_planes[1] = CreatePlane(corners[1], corners[2]);  // Right
-    s_frustum_planes[2] = CreatePlane(corners[0], corners[1]);  // Bottom
-    s_frustum_planes[3] = CreatePlane(corners[2], corners[3]);  // Top
+    s_frustum_planes[0] = CreatePlane(corners[0], corners[3]);  // Left
+    s_frustum_planes[1] = CreatePlane(corners[2], corners[1]);  // Right
+    s_frustum_planes[2] = CreatePlane(corners[1], corners[0]);  // Bottom
+    s_frustum_planes[3] = CreatePlane(corners[3], corners[2]);  // Top
   }
   barrier();
 
