@@ -4,6 +4,7 @@
 
 #include "camera.h"
 #include "cascade.h"
+#include "culling.h"
 #include "glad.h"
 #include "render_target.h"
 #include "scene.h"
@@ -165,10 +166,14 @@ void DrawCascadedShadowMap(
     glViewport(0, 0, target.width, target.height);
     glClear(GL_DEPTH_BUFFER_BIT);
 
+    Eigen::Vector4f planes[6];
+    ExtractFrustumPlanes(cascade.view_projection_matrix, planes);
+
     opaque_program.Use();
     opaque_program.Uniform("u_view_proj", cascade.view_projection_matrix);
     for (const Geometry* geo_ptr : opaque_geos) {
       const Geometry& geo = *geo_ptr;
+      if (!IsAABBInFrustum(geo.bounding_box, planes)) continue;
       opaque_program.Uniform("u_model", geo.transform.matrix());
       glBindVertexArray(geo.vao);
       if (geo.index_count > 0) {
@@ -182,6 +187,7 @@ void DrawCascadedShadowMap(
     cutout_program.Uniform("u_view_proj", cascade.view_projection_matrix);
     for (const Geometry* geo_ptr : cutout_geos) {
       const Geometry& geo = *geo_ptr;
+      if (!IsAABBInFrustum(geo.bounding_box, planes)) continue;
       cutout_program.Uniform("u_model", geo.transform.matrix());
 
       if (geo.material_id >= 0 &&
@@ -203,6 +209,8 @@ void DrawCascadedShadowMap(
   }
 
   // Restore state.
+  glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
@@ -283,10 +291,14 @@ void DrawShadowAtlas(Scene& scene, const ShaderProgram& opaque_program,
 
     light.shadow_view_proj = proj_matrix * view_matrix;
 
+    Eigen::Vector4f planes[6];
+    ExtractFrustumPlanes(light.shadow_view_proj, planes);
+
     opaque_program.Use();
     opaque_program.Uniform("u_view_proj", light.shadow_view_proj);
     for (const Geometry* geo_ptr : opaque_geos) {
       const Geometry& geo = *geo_ptr;
+      if (!IsAABBInFrustum(geo.bounding_box, planes)) continue;
       opaque_program.Uniform("u_model", geo.transform.matrix());
       glBindVertexArray(geo.vao);
       if (geo.index_count > 0) {
@@ -300,6 +312,7 @@ void DrawShadowAtlas(Scene& scene, const ShaderProgram& opaque_program,
     cutout_program.Uniform("u_view_proj", light.shadow_view_proj);
     for (const Geometry* geo_ptr : cutout_geos) {
       const Geometry& geo = *geo_ptr;
+      if (!IsAABBInFrustum(geo.bounding_box, planes)) continue;
       cutout_program.Uniform("u_model", geo.transform.matrix());
       if (geo.material_id >= 0 &&
           static_cast<size_t>(geo.material_id) < scene.materials.size()) {
@@ -318,6 +331,8 @@ void DrawShadowAtlas(Scene& scene, const ShaderProgram& opaque_program,
   }
 
   // Restore state.
+  glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }

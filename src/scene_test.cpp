@@ -2,11 +2,7 @@
 
 #include <gtest/gtest.h>
 
-#include <algorithm>
-#include <cmath>
-#include <random>
-
-namespace sh_baker {
+namespace sh_renderer {
 
 TEST(SceneTest, TransformedVertices) {
   Geometry geo;
@@ -62,4 +58,61 @@ TEST(SceneTest, TransformedTangents) {
   EXPECT_EQ(transformed[0].w(), 1.0f);
 }
 
-}  // namespace sh_baker
+TEST(SceneTest, PartitionLooseGeometries_SplitsDisconnected) {
+  Scene scene;
+  Geometry geo;
+  // Two triangles far apart
+  geo.vertices = {{0.0f, 0.0f, 0.0f},  {1.0f, 0.0f, 0.0f},
+                  {0.0f, 1.0f, 0.0f},  {10.0f, 0.0f, 0.0f},
+                  {11.0f, 0.0f, 0.0f}, {10.0f, 1.0f, 0.0f}};
+  geo.indices = {0, 1, 2, 3, 4, 5};
+  scene.geometries.push_back(std::move(geo));
+
+  PartitionLooseGeometries(scene);
+
+  // Should split into two geometries
+  EXPECT_EQ(scene.geometries.size(), 2);
+
+  if (scene.geometries.size() == 2) {
+    EXPECT_EQ(scene.geometries[0].vertices.size(), 3);
+    EXPECT_EQ(scene.geometries[1].vertices.size(), 3);
+    EXPECT_EQ(scene.geometries[0].indices.size(), 3);
+    EXPECT_EQ(scene.geometries[1].indices.size(), 3);
+  }
+}
+
+TEST(SceneTest, PartitionLooseGeometries_MergesClose) {
+  Scene scene;
+  Geometry geo;
+  // Two triangles close together (centers within 0.1m)
+  geo.vertices = {{0.0f, 0.0f, 0.0f},  {1.0f, 0.0f, 0.0f},
+                  {0.0f, 1.0f, 0.0f},  {0.05f, 0.0f, 0.0f},
+                  {1.05f, 0.0f, 0.0f}, {0.05f, 1.0f, 0.0f}};
+  geo.indices = {0, 1, 2, 3, 4, 5};
+  scene.geometries.push_back(std::move(geo));
+
+  PartitionLooseGeometries(scene);
+
+  // Should remain one geometry
+  EXPECT_EQ(scene.geometries.size(), 1);
+  if (scene.geometries.size() == 1) {
+    EXPECT_EQ(scene.geometries[0].vertices.size(), 6);
+    EXPECT_EQ(scene.geometries[0].indices.size(), 6);
+  }
+}
+
+TEST(SceneTest, PartitionLooseGeometries_HandlesNoIndices) {
+  Scene scene;
+  Geometry geo;
+  // Triangles far apart, no indices
+  geo.vertices = {{0.0f, 0.0f, 0.0f},  {1.0f, 0.0f, 0.0f},
+                  {0.0f, 1.0f, 0.0f},  {10.0f, 0.0f, 0.0f},
+                  {11.0f, 0.0f, 0.0f}, {10.0f, 1.0f, 0.0f}};
+  scene.geometries.push_back(std::move(geo));
+
+  PartitionLooseGeometries(scene);
+
+  EXPECT_EQ(scene.geometries.size(), 2);
+}
+
+}  // namespace sh_renderer
