@@ -235,7 +235,7 @@ float PCFPoissonDisk9(sampler2DShadow shadow_map, vec3 shadow_coord,
 float ComputeShadow(vec3 world_pos, vec3 normal, ShadingAngles angles,
                     mat4 to_light_space, sampler2DShadow shadow_map,
                     vec2 uv_scale, vec2 uv_offset, float penumbra) {
-  const float normal_bias_scale = 0.01;
+  const float normal_bias_scale = 0.005;
   vec3 biased_world_pos =
       world_pos + normal * (1.0 - angles.n_dot_l) * normal_bias_scale;
   vec4 frag_pos_light_space = to_light_space * vec4(biased_world_pos, 1.0);
@@ -247,8 +247,8 @@ float ComputeShadow(vec3 world_pos, vec3 normal, ShadingAngles angles,
   }
 
   float bias =
-      0.001 * (sqrt(1.0 - angles.n_dot_l * angles.n_dot_l) / angles.n_dot_l);
-  bias = clamp(bias, 0.0, 0.005);
+      0.0001 * (sqrt(1.0 - angles.n_dot_l * angles.n_dot_l) / angles.n_dot_l);
+  bias = clamp(bias, 0.0, 0.001);
 
   float texel_size = 1.0 / float(textureSize(shadow_map, 0).x);
   vec3 compare_coord =
@@ -434,7 +434,8 @@ void main() {
   vec3 l_direct = vec3(0.0);
 
   // Direct sun.
-  float sun_visibility = ComputeSunShadow(v_world_pos, normal_world, angles);
+  float sun_visibility =
+      ComputeSunShadow(v_world_pos, interpolated_normal, angles);
   vec3 sun_incoming = u_sun.color * u_sun.intensity * sun_visibility;
   vec3 direct_sun_brdf =
       ComputeDirectBRDF(angles, f0, albedo, metallic, roughness, occlusion);

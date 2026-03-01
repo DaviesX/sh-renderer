@@ -202,7 +202,7 @@ void DrawCascadedShadowMap(
     }
   }
 
-  // Restore state
+  // Restore state.
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
@@ -317,6 +317,7 @@ void DrawShadowAtlas(Scene& scene, const ShaderProgram& opaque_program,
     }
   }
 
+  // Restore state.
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
