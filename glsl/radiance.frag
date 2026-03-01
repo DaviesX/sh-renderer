@@ -247,7 +247,7 @@ float ComputeShadow(vec3 world_pos, vec3 normal, ShadingAngles angles,
   }
 
   float bias =
-      0.0001 * (sqrt(1.0 - angles.n_dot_l * angles.n_dot_l) / angles.n_dot_l);
+      0.0005 * (sqrt(1.0 - angles.n_dot_l * angles.n_dot_l) / angles.n_dot_l);
   bias = clamp(bias, 0.0, 0.001);
 
   float texel_size = 1.0 / float(textureSize(shadow_map, 0).x);
@@ -269,7 +269,7 @@ float ComputeSunShadow(vec3 world_pos, vec3 normal, ShadingAngles angles) {
 
   return ComputeShadow(
       world_pos, normal, angles, u_sun_cascade_view_projections[layer],
-      u_sun_shadow_maps[layer], vec2(1.0), vec2(0.0), 2.5 / float(layer + 1));
+      u_sun_shadow_maps[layer], vec2(1.0), vec2(0.0), 2.0 / float(layer + 1));
 }
 
 // --- SH Irradiance ---
@@ -434,8 +434,7 @@ void main() {
   vec3 l_direct = vec3(0.0);
 
   // Direct sun.
-  float sun_visibility =
-      ComputeSunShadow(v_world_pos, normal_world, angles);
+  float sun_visibility = ComputeSunShadow(v_world_pos, normal_world, angles);
   vec3 sun_incoming = u_sun.color * u_sun.intensity * sun_visibility;
   vec3 direct_sun_brdf =
       ComputeDirectBRDF(angles, f0, albedo, metallic, roughness, occlusion);
