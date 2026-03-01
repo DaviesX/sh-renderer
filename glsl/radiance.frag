@@ -435,7 +435,7 @@ void main() {
 
   // Direct sun.
   float sun_visibility =
-      ComputeSunShadow(v_world_pos, interpolated_normal, angles);
+      ComputeSunShadow(v_world_pos, normal_world, angles);
   vec3 sun_incoming = u_sun.color * u_sun.intensity * sun_visibility;
   vec3 direct_sun_brdf =
       ComputeDirectBRDF(angles, f0, albedo, metallic, roughness, occlusion);
