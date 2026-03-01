@@ -46,7 +46,8 @@ void Run(const std::filesystem::path& scene_path) {
     LOG(ERROR) << "Failed to load scene: " << scene_path;
     return;
   }
-
+  PartitionLooseGeometries(*scene);
+  LogScene(*scene);
   UploadSceneToGPU(*scene);
 
   ShaderProgram cascaded_shadow_map_opaque_program =

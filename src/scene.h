@@ -211,6 +211,15 @@ void UploadLightsToGPU(Scene& scene);
 // and allocate into the shadow atlas.
 void AllocateShadowMapForLights(Scene& scene, const class Camera& camera);
 
+// Partitions each loose geometry in the scene into independent connected
+// components that are further away than 0.1 meters. Replaces the original
+// geometry with the partitioned geometries in the scene.
+void PartitionLooseGeometries(Scene& scene);
+
+// Logs statistics about the scene, such as the total number of geometries,
+// materials, lights, and vertices.
+void LogScene(const Scene& scene);
+
 // Transforms the geometry by the transform matrix.
 std::vector<Eigen::Vector3f> TransformedVertices(const Geometry& geometry);
 std::vector<Eigen::Vector3f> TransformedNormals(const Geometry& geometry);

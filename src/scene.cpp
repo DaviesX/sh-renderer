@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numeric>
+#include <unordered_map>
 
 #include "camera.h"
 #include "glad.h"
@@ -235,6 +237,206 @@ void UploadGeometry(Geometry& geo) {
   glVertexArrayAttribFormat(geo.vao, 4, 4, GL_FLOAT, GL_FALSE,
                             offsetof(Vertex, tan));
   glVertexArrayAttribBinding(geo.vao, 4, binding_index);
+}
+
+std::vector<Geometry> PartitionLooseGeometry(const Geometry& geometry) {
+  std::vector<Geometry> result;
+  if (geometry.vertices.empty()) return result;
+
+  int num_vertices = static_cast<int>(geometry.vertices.size());
+  std::vector<int> parent(num_vertices);
+  std::vector<int> size(num_vertices, 1);
+  for (int i = 0; i < num_vertices; ++i) parent[i] = i;
+
+  auto find = [&](int i) {
+    int root = i;
+    while (root != parent[root]) root = parent[root];
+    int curr = i;
+    while (curr != root) {
+      int nxt = parent[curr];
+      parent[curr] = root;
+      curr = nxt;
+    }
+    return root;
+  };
+
+  auto unite = [&](int i, int j) {
+    int root_i = find(i);
+    int root_j = find(j);
+    if (root_i != root_j) {
+      if (size[root_i] < size[root_j]) {
+        parent[root_i] = root_j;
+        size[root_j] += size[root_i];
+      } else {
+        parent[root_j] = root_i;
+        size[root_i] += size[root_j];
+      }
+    }
+  };
+
+  // 1. Identify connected components of the mesh.
+  // Merge identical vertices to handle discontinuous indices for the same
+  // position.
+  std::vector<int> sorted_verts(num_vertices);
+  std::iota(sorted_verts.begin(), sorted_verts.end(), 0);
+  std::sort(sorted_verts.begin(), sorted_verts.end(), [&](int a, int b) {
+    const auto& va = geometry.vertices[a];
+    const auto& vb = geometry.vertices[b];
+    if (va.x() != vb.x()) return va.x() < vb.x();
+    if (va.y() != vb.y()) return va.y() < vb.y();
+    return va.z() < vb.z();
+  });
+
+  for (int i = 0; i < num_vertices - 1; ++i) {
+    if ((geometry.vertices[sorted_verts[i]] -
+         geometry.vertices[sorted_verts[i + 1]])
+            .squaredNorm() < 1e-8f) {
+      unite(sorted_verts[i], sorted_verts[i + 1]);
+    }
+  }
+
+  if (geometry.indices.empty()) {
+    for (int i = 0; i + 2 < num_vertices; i += 3) {
+      unite(i, i + 1);
+      unite(i + 1, i + 2);
+    }
+  } else {
+    for (size_t i = 0; i + 2 < geometry.indices.size(); i += 3) {
+      unite(geometry.indices[i], geometry.indices[i + 1]);
+      unite(geometry.indices[i + 1], geometry.indices[i + 2]);
+    }
+  }
+
+  // 2. For each connected component record the center.
+  std::unordered_map<int, std::vector<int>> comp_verts;
+  for (int i = 0; i < num_vertices; ++i) {
+    comp_verts[find(i)].push_back(i);
+  }
+
+  struct ComponentData {
+    int id;
+    Eigen::Vector3f center;
+  };
+  std::vector<ComponentData> components;
+  for (const auto& [comp_id, verts] : comp_verts) {
+    Eigen::Vector3f center = Eigen::Vector3f::Zero();
+    for (int v : verts) {
+      center += geometry.vertices[v];
+    }
+    center /= static_cast<float>(verts.size());
+    center = geometry.transform * center;
+    components.push_back({comp_id, center});
+  }
+
+  // 3. Conduct union-find for the components. If two components are within
+  //    0.1 meters of each other, merge them.
+  int num_comps = static_cast<int>(components.size());
+  std::vector<int> comp_parent(num_comps);
+  std::vector<int> comp_size(num_comps, 1);
+  for (int i = 0; i < num_comps; ++i) comp_parent[i] = i;
+
+  auto comp_find = [&](int i) {
+    int root = i;
+    while (root != comp_parent[root]) root = comp_parent[root];
+    int curr = i;
+    while (curr != root) {
+      int nxt = comp_parent[curr];
+      comp_parent[curr] = root;
+      curr = nxt;
+    }
+    return root;
+  };
+
+  auto comp_unite = [&](int i, int j) {
+    int root_i = comp_find(i);
+    int root_j = comp_find(j);
+    if (root_i != root_j) {
+      if (comp_size[root_i] < comp_size[root_j]) {
+        comp_parent[root_i] = root_j;
+        comp_size[root_j] += comp_size[root_i];
+      } else {
+        comp_parent[root_j] = root_i;
+        comp_size[root_i] += comp_size[root_j];
+      }
+    }
+  };
+
+  for (int i = 0; i < num_comps; ++i) {
+    for (int j = i + 1; j < num_comps; ++j) {
+      if ((components[i].center - components[j].center).norm() <= 0.1f) {
+        comp_unite(i, j);
+      }
+    }
+  }
+
+  // 4. Create a geometry for each set (a.k.a.root of the union-find tree).
+  //    Remember to partition the vertices and indices of the specified
+  //    geometry.
+  std::unordered_map<int, std::vector<int>> merged_comps;
+  for (int i = 0; i < num_comps; ++i) {
+    merged_comps[comp_find(i)].push_back(components[i].id);
+  }
+
+  std::vector<int> vert_to_result(num_vertices, -1);
+  std::vector<uint32_t> old_to_new(num_vertices, 0);
+
+  int num_results = 0;
+  for (const auto& [root_comp_idx, comp_ids] : merged_comps) {
+    int res_idx = num_results++;
+    Geometry sub_geo;
+    sub_geo.material_id = geometry.material_id;
+    sub_geo.transform = geometry.transform;
+
+    for (int c_id : comp_ids) {
+      for (int old_v : comp_verts[c_id]) {
+        vert_to_result[old_v] = res_idx;
+        old_to_new[old_v] = static_cast<uint32_t>(sub_geo.vertices.size());
+
+        sub_geo.vertices.push_back(geometry.vertices[old_v]);
+        if (!geometry.normals.empty())
+          sub_geo.normals.push_back(geometry.normals[old_v]);
+        if (!geometry.texture_uvs.empty())
+          sub_geo.texture_uvs.push_back(geometry.texture_uvs[old_v]);
+        if (!geometry.lightmap_uvs.empty())
+          sub_geo.lightmap_uvs.push_back(geometry.lightmap_uvs[old_v]);
+        if (!geometry.tangents.empty())
+          sub_geo.tangents.push_back(geometry.tangents[old_v]);
+      }
+    }
+    result.push_back(std::move(sub_geo));
+  }
+
+  // Generate indices for the partitioned geometries.
+  if (geometry.indices.empty()) {
+    for (int i = 0; i + 2 < num_vertices; i += 3) {
+      int v0 = i;
+      int v1 = i + 1;
+      int v2 = i + 2;
+      int res_idx = vert_to_result[v0];
+      if (res_idx != -1 && vert_to_result[v1] == res_idx &&
+          vert_to_result[v2] == res_idx) {
+        result[res_idx].indices.push_back(old_to_new[v0]);
+        result[res_idx].indices.push_back(old_to_new[v1]);
+        result[res_idx].indices.push_back(old_to_new[v2]);
+      }
+    }
+  } else {
+    for (size_t i = 0; i + 2 < geometry.indices.size(); i += 3) {
+      int v0 = geometry.indices[i];
+      int v1 = geometry.indices[i + 1];
+      int v2 = geometry.indices[i + 2];
+      int res_idx = vert_to_result[v0];
+      if (res_idx != -1 && vert_to_result[v1] == res_idx &&
+          vert_to_result[v2] == res_idx) {
+        result[res_idx].indices.push_back(old_to_new[v0]);
+        result[res_idx].indices.push_back(old_to_new[v1]);
+        result[res_idx].indices.push_back(old_to_new[v2]);
+      }
+    }
+  }
+
+  // 5. Return the list of geometries.
+  return result;
 }
 
 }  // namespace
@@ -476,6 +678,23 @@ void AllocateShadowMapForLights(Scene& scene, const Camera& camera) {
   }
 }
 
+void PartitionLooseGeometries(Scene& scene) {
+  for (auto it = scene.geometries.begin(); it != scene.geometries.end();) {
+    std::vector<Geometry> independent_geos = PartitionLooseGeometry(*it);
+    if (independent_geos.size() <= 1) {
+      if (!independent_geos.empty()) {
+        *it = std::move(independent_geos[0]);
+      }
+      ++it;
+      continue;
+    }
+    it = scene.geometries.erase(it);
+    it = scene.geometries.insert(it, independent_geos.begin(),
+                                 independent_geos.end());
+    it += independent_geos.size();
+  }
+}
+
 // ... Existing functions ...
 std::vector<Eigen::Vector3f> TransformedVertices(const Geometry& geometry) {
   std::vector<Eigen::Vector3f> out;
@@ -498,8 +717,16 @@ std::vector<Eigen::Vector3f> TransformedNormals(const Geometry& geometry) {
 }
 
 std::vector<Eigen::Vector4f> TransformedTangents(const Geometry& geometry) {
-  return geometry.tangents;  // Placeholder, assuming rigid transform handling
-                             // elsewhere or not needed on CPU
+  std::vector<Eigen::Vector4f> out;
+  out.reserve(geometry.tangents.size());
+  Eigen::Matrix3f mat = geometry.transform.linear();
+  for (const auto& t : geometry.tangents) {
+    Eigen::Vector3f t_vec = t.head<3>();
+    Eigen::Vector3f transformed_t = (mat * t_vec).normalized();
+    out.push_back(Eigen::Vector4f(transformed_t.x(), transformed_t.y(),
+                                  transformed_t.z(), t.w()));
+  }
+  return out;
 }
 
 float SurfaceArea(const Geometry& geometry) {
@@ -563,6 +790,30 @@ void LoadLightmaps(Scene& scene, const std::filesystem::path& gltf_file) {
       free(out_rgba);
     }
   }
+}
+
+void LogScene(const Scene& scene) {
+  LOG(INFO) << "--- Scene Stats ---";
+  LOG(INFO) << "Geometries: " << scene.geometries.size();
+  LOG(INFO) << "Materials: " << scene.materials.size();
+  LOG(INFO) << "Point Lights: " << scene.point_lights.size();
+  LOG(INFO) << "Spot Lights: " << scene.spot_lights.size();
+  LOG(INFO) << "Area Lights: " << scene.area_lights.size();
+  if (scene.sun_light) {
+    LOG(INFO) << "Sun Light: 1";
+  } else {
+    LOG(INFO) << "Sun Light: 0";
+  }
+
+  size_t total_vertices = 0;
+  size_t total_indices = 0;
+  for (const auto& geo : scene.geometries) {
+    total_vertices += geo.vertices.size();
+    total_indices += geo.indices.size();
+  }
+  LOG(INFO) << "Total Vertices: " << total_vertices;
+  LOG(INFO) << "Total Indices: " << total_indices;
+  LOG(INFO) << "-------------------";
 }
 
 }  // namespace sh_renderer
