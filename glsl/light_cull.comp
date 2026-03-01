@@ -208,12 +208,27 @@ void main() {
   // Cull spot lights.
   for (uint i = local_index; i < total_spot; i += num_threads) {
     vec3 world_pos = spot_lights[i].position;
-    float radius = spot_lights[i].radius;
+    vec3 world_dir = spot_lights[i].direction;
+    float range = spot_lights[i].radius;
+    float cos_alpha = spot_lights[i].cos_outer_cone;
 
-    // Transform to view space.
+    // Transform position and direction to view space.
     vec3 view_pos = (u_view * vec4(world_pos, 1.0)).xyz;
+    vec3 view_dir = normalize((u_view * vec4(world_dir, 0.0)).xyz);
 
-    if (SphereInFrustum(view_pos, radius, far_z, near_z)) {
+    float bound_radius;
+    vec3 bound_center;
+
+    if (cos_alpha > 0.70710678) {  // half-angle < 45 degrees
+      bound_radius = range / (2.0 * cos_alpha);
+      bound_center = view_pos + view_dir * bound_radius;
+    } else {  // half-angle >= 45 degrees
+      float sin_alpha = sqrt(max(0.0, 1.0 - cos_alpha * cos_alpha));
+      bound_radius = range * sin_alpha;
+      bound_center = view_pos + view_dir * (range * cos_alpha);
+    }
+
+    if (SphereInFrustum(bound_center, bound_radius, far_z, near_z)) {
       uint slot = atomicAdd(s_tile_spot_count, 1);
       if (slot < MAX_LIGHTS_PER_TILE) {
         s_tile_spot_indices[slot] = i;

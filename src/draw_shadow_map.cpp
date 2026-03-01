@@ -4,6 +4,7 @@
 
 #include "camera.h"
 #include "cascade.h"
+#include "culling.h"
 #include "glad.h"
 #include "render_target.h"
 #include "scene.h"
@@ -134,8 +135,8 @@ void DrawCascadedShadowMap(
   glDepthFunc(GL_LEQUAL);
   // Disable Color mask
   glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-  glDisable(GL_CULL_FACE);
-  // glCullFace(GL_BACK);
+  glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
 
   std::vector<const Geometry*> opaque_geos;
   std::vector<const Geometry*> cutout_geos;
@@ -165,10 +166,14 @@ void DrawCascadedShadowMap(
     glViewport(0, 0, target.width, target.height);
     glClear(GL_DEPTH_BUFFER_BIT);
 
+    Eigen::Vector4f planes[6];
+    ExtractFrustumPlanes(cascade.view_projection_matrix, planes);
+
     opaque_program.Use();
     opaque_program.Uniform("u_view_proj", cascade.view_projection_matrix);
     for (const Geometry* geo_ptr : opaque_geos) {
       const Geometry& geo = *geo_ptr;
+      if (!IsAABBInFrustum(geo.bounding_box, planes)) continue;
       opaque_program.Uniform("u_model", geo.transform.matrix());
       glBindVertexArray(geo.vao);
       if (geo.index_count > 0) {
@@ -182,6 +187,7 @@ void DrawCascadedShadowMap(
     cutout_program.Uniform("u_view_proj", cascade.view_projection_matrix);
     for (const Geometry* geo_ptr : cutout_geos) {
       const Geometry& geo = *geo_ptr;
+      if (!IsAABBInFrustum(geo.bounding_box, planes)) continue;
       cutout_program.Uniform("u_model", geo.transform.matrix());
 
       if (geo.material_id >= 0 &&
@@ -217,8 +223,8 @@ void DrawShadowAtlas(Scene& scene, const ShaderProgram& opaque_program,
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LEQUAL);
   glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-  glDisable(GL_CULL_FACE);
-  // glCullFace(GL_BACK);
+  glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
 
   std::vector<const Geometry*> opaque_geos;
   std::vector<const Geometry*> cutout_geos;
@@ -285,10 +291,14 @@ void DrawShadowAtlas(Scene& scene, const ShaderProgram& opaque_program,
 
     light.shadow_view_proj = proj_matrix * view_matrix;
 
+    Eigen::Vector4f planes[6];
+    ExtractFrustumPlanes(light.shadow_view_proj, planes);
+
     opaque_program.Use();
     opaque_program.Uniform("u_view_proj", light.shadow_view_proj);
     for (const Geometry* geo_ptr : opaque_geos) {
       const Geometry& geo = *geo_ptr;
+      if (!IsAABBInFrustum(geo.bounding_box, planes)) continue;
       opaque_program.Uniform("u_model", geo.transform.matrix());
       glBindVertexArray(geo.vao);
       if (geo.index_count > 0) {
@@ -302,6 +312,7 @@ void DrawShadowAtlas(Scene& scene, const ShaderProgram& opaque_program,
     cutout_program.Uniform("u_view_proj", light.shadow_view_proj);
     for (const Geometry* geo_ptr : cutout_geos) {
       const Geometry& geo = *geo_ptr;
+      if (!IsAABBInFrustum(geo.bounding_box, planes)) continue;
       cutout_program.Uniform("u_model", geo.transform.matrix());
       if (geo.material_id >= 0 &&
           static_cast<size_t>(geo.material_id) < scene.materials.size()) {

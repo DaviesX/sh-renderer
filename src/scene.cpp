@@ -678,6 +678,23 @@ void AllocateShadowMapForLights(Scene& scene, const Camera& camera) {
   }
 }
 
+void ComputeSceneBoundingBoxes(Scene& scene) {
+  for (auto& geo : scene.geometries) {
+    geo.bounding_box.min =
+        Eigen::Vector3f::Constant(std::numeric_limits<float>::infinity());
+    geo.bounding_box.max =
+        Eigen::Vector3f::Constant(-std::numeric_limits<float>::infinity());
+
+    if (geo.vertices.empty()) continue;
+
+    for (const auto& v : geo.vertices) {
+      Eigen::Vector3f world_v = geo.transform * v;
+      geo.bounding_box.min = geo.bounding_box.min.cwiseMin(world_v);
+      geo.bounding_box.max = geo.bounding_box.max.cwiseMax(world_v);
+    }
+  }
+}
+
 void OptimizeScene(Scene& scene) {
   std::sort(scene.geometries.begin(), scene.geometries.end(),
             [](const Geometry& a, const Geometry& b) {

@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "culling.h"
 #include "ssbo.h"
 
 namespace sh_renderer {
@@ -91,6 +92,9 @@ struct Geometry {
   uint32_t vbo = 0;
   uint32_t ebo = 0;
   uint32_t index_count = 0;
+
+  // Culling
+  AABB bounding_box;
 };
 
 // --- Light ---
@@ -210,6 +214,9 @@ void UploadLightsToGPU(Scene& scene);
 // Frustum cull spot lights against main camera, rank by form factor,
 // and allocate into the shadow atlas.
 void AllocateShadowMapForLights(Scene& scene, const class Camera& camera);
+
+// Computes the world-space bounding box for each geometry in the scene.
+void ComputeSceneBoundingBoxes(Scene& scene);
 
 // Optimizes the scene by sorting geometries by material_id to minimize state
 // changes.

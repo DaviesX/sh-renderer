@@ -69,6 +69,7 @@ set(LIB_SOURCES
     src/camera.cpp
     src/cascade.cpp
     src/compute_light_tile.cpp
+    src/culling.cpp
     src/draw_depth.cpp
     src/draw_radiance.cpp
     src/draw_shadow_map.cpp
@@ -90,6 +91,7 @@ set(LIB_HEADERS
     src/cascade.h
     src/colorspace.h
     src/compute_light_tile.h
+    src/culling.h
     src/draw_depth.h
     src/draw_radiance.h
     src/draw_shadow_map.h
@@ -137,6 +139,7 @@ enable_testing()
 add_executable(sh_renderer_test
     src/camera_test.cpp
     src/cascade_test.cpp
+    src/culling_test.cpp
     src/input_test.cpp
     src/interaction_test.cpp
     src/scene_test.cpp

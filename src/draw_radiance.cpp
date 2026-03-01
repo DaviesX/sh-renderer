@@ -4,6 +4,7 @@
 
 #include "cascade.h"
 #include "compute_light_tile.h"
+#include "culling.h"
 #include "draw_sky.h"
 #include "glad.h"
 #include "shader.h"
@@ -117,10 +118,14 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
     glBindTextureUnit(11, 0);
   }
 
+  Eigen::Vector4f planes[6];
+  ExtractFrustumPlanes(GetViewProjMatrix(camera), planes);
+
   int current_material_id = -2;
 
   for (const auto& geo : scene.geometries) {
     if (geo.vao == 0) continue;
+    if (!IsAABBInFrustum(geo.bounding_box, planes)) continue;
 
     program.Uniform("u_model", geo.transform.matrix());
 
