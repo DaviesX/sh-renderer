@@ -211,6 +211,10 @@ void UploadLightsToGPU(Scene& scene);
 // and allocate into the shadow atlas.
 void AllocateShadowMapForLights(Scene& scene, const class Camera& camera);
 
+// Optimizes the scene by sorting geometries by material_id to minimize state
+// changes.
+void OptimizeScene(Scene& scene);
+
 // Partitions each loose geometry in the scene into independent connected
 // components that are further away than 0.1 meters. Replaces the original
 // geometry with the partitioned geometries in the scene.

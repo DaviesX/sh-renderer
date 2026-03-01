@@ -117,37 +117,43 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
     glBindTextureUnit(11, 0);
   }
 
+  int current_material_id = -2;
+
   for (const auto& geo : scene.geometries) {
     if (geo.vao == 0) continue;
 
     program.Uniform("u_model", geo.transform.matrix());
 
-    if (geo.material_id >= 0 &&
-        static_cast<size_t>(geo.material_id) < scene.materials.size()) {
-      const auto& mat = scene.materials[geo.material_id];
-      glBindTextureUnit(0, mat.albedo.texture_id);
-      glBindTextureUnit(1, mat.normal_texture.texture_id);
-      glBindTextureUnit(2, mat.metallic_roughness_texture.texture_id);
+    if (geo.material_id != current_material_id) {
+      current_material_id = geo.material_id;
 
-      program.Uniform("u_emissive_factor", mat.emissive_factor);
-      program.Uniform("u_emissive_strength", mat.emissive_strength);
+      if (geo.material_id >= 0 &&
+          static_cast<size_t>(geo.material_id) < scene.materials.size()) {
+        const auto& mat = scene.materials[geo.material_id];
+        glBindTextureUnit(0, mat.albedo.texture_id);
+        glBindTextureUnit(1, mat.normal_texture.texture_id);
+        glBindTextureUnit(2, mat.metallic_roughness_texture.texture_id);
 
-      if (mat.emissive_texture) {
-        program.Uniform("u_has_emissive_texture", 1);
-        glBindTextureUnit(3, mat.emissive_texture->texture_id);
+        program.Uniform("u_emissive_factor", mat.emissive_factor);
+        program.Uniform("u_emissive_strength", mat.emissive_strength);
+
+        if (mat.emissive_texture) {
+          program.Uniform("u_has_emissive_texture", 1);
+          glBindTextureUnit(3, mat.emissive_texture->texture_id);
+        } else {
+          program.Uniform("u_has_emissive_texture", 0);
+          glBindTextureUnit(3, 0);
+        }
       } else {
-        program.Uniform("u_has_emissive_texture", 0);
+        glBindTextureUnit(0, 0);
+        glBindTextureUnit(1, 0);
+        glBindTextureUnit(2, 0);
         glBindTextureUnit(3, 0);
+        program.Uniform("u_has_emissive_texture", 0);
+        program.Uniform("u_emissive_factor",
+                        Eigen::Vector3f(Eigen::Vector3f::Zero()));
+        program.Uniform("u_emissive_strength", 0.0f);
       }
-    } else {
-      glBindTextureUnit(0, 0);
-      glBindTextureUnit(1, 0);
-      glBindTextureUnit(2, 0);
-      glBindTextureUnit(3, 0);
-      program.Uniform("u_has_emissive_texture", 0);
-      program.Uniform("u_emissive_factor",
-                      Eigen::Vector3f(Eigen::Vector3f::Zero()));
-      program.Uniform("u_emissive_strength", 0.0f);
     }
 
     glBindVertexArray(geo.vao);

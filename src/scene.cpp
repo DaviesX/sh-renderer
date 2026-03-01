@@ -678,6 +678,13 @@ void AllocateShadowMapForLights(Scene& scene, const Camera& camera) {
   }
 }
 
+void OptimizeScene(Scene& scene) {
+  std::sort(scene.geometries.begin(), scene.geometries.end(),
+            [](const Geometry& a, const Geometry& b) {
+              return a.material_id < b.material_id;
+            });
+}
+
 void PartitionLooseGeometries(Scene& scene) {
   for (auto it = scene.geometries.begin(); it != scene.geometries.end();) {
     std::vector<Geometry> independent_geos = PartitionLooseGeometry(*it);

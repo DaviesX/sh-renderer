@@ -47,6 +47,7 @@ void Run(const std::filesystem::path& scene_path) {
     return;
   }
   PartitionLooseGeometries(*scene);
+  OptimizeScene(*scene);
   LogScene(*scene);
   UploadSceneToGPU(*scene);
 
