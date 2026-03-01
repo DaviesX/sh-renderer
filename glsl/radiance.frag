@@ -247,7 +247,7 @@ float ComputeShadow(vec3 world_pos, vec3 normal, ShadingAngles angles,
   }
 
   float bias =
-      0.003 * (sqrt(1.0 - angles.n_dot_l * angles.n_dot_l) / angles.n_dot_l);
+      0.001 * (sqrt(1.0 - angles.n_dot_l * angles.n_dot_l) / angles.n_dot_l);
   bias = clamp(bias, 0.0, 0.003);
 
   float texel_size = 1.0 / float(textureSize(shadow_map, 0).x);

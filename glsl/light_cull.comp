@@ -174,12 +174,12 @@ void main() {
   float max_depth_ndc = uintBitsToFloat(s_max_depth_uint);
 
   // Convert NDC depths to view-space Z.
-  // For a standard projection, view.z = proj[3][2] / (ndc_z * 2 - 1 +
+  // For a standard projection, view.z = -proj[3][2] / (ndc_z * 2 - 1 +
   // proj[2][2]).
   float min_depth_view =
-      u_projection[3][2] / (min_depth_ndc * 2.0 - 1.0 + u_projection[2][2]);
+      -u_projection[3][2] / (min_depth_ndc * 2.0 - 1.0 + u_projection[2][2]);
   float max_depth_view =
-      u_projection[3][2] / (max_depth_ndc * 2.0 - 1.0 + u_projection[2][2]);
+      -u_projection[3][2] / (max_depth_ndc * 2.0 - 1.0 + u_projection[2][2]);
 
   // Ensure min <= max (view space Z is negative, so min_view is more negative).
   float near_z = max(min_depth_view, max_depth_view);  // Closest to camera
