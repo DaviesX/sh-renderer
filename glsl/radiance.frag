@@ -38,6 +38,7 @@ layout(binding = 8) uniform sampler2D u_PackedTex0;
 layout(binding = 9) uniform sampler2D u_PackedTex1;
 layout(binding = 10) uniform sampler2D u_PackedTex2;
 layout(binding = 11) uniform sampler2DShadow u_spot_shadow_atlas;
+layout(binding = 12) uniform sampler2D u_ssao;
 
 uniform vec3 u_emissive_factor;
 uniform float u_emissive_strength;
@@ -423,6 +424,10 @@ void main() {
   vec3 l_indirect = ComputeIndirectBRDF(angles, indirect_irradiance,
                                         indirect_reflection_radiance, f0,
                                         albedo, metallic, roughness, occlusion);
+
+  vec2 ssao_uv = gl_FragCoord.xy / vec2(u_screen_size);
+  float ssao_occlusion = texture(u_ssao, ssao_uv).r;
+  l_indirect *= ssao_occlusion;
 
   // Emission
   vec3 l_emission = u_emissive_strength * u_emissive_factor;

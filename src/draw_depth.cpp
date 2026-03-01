@@ -62,6 +62,26 @@ ShaderProgram CreateDepthCutoutProgram() {
   return std::move(*program);
 }
 
+ShaderProgram CreateDepthOpaqueWNormalProgram() {
+  auto program = ShaderProgram::CreateGraphics(
+      "glsl/depth_opaque_w_normal.vert", "glsl/depth_opaque_w_normal.frag");
+  if (!program) {
+    LOG(ERROR) << "Failed to create depth shader program.";
+    return {};
+  }
+  return std::move(*program);
+}
+
+ShaderProgram CreateDepthCutoutWNormalProgram() {
+  auto program = ShaderProgram::CreateGraphics(
+      "glsl/depth_cutout_w_normal.vert", "glsl/depth_cutout_w_normal.frag");
+  if (!program) {
+    LOG(ERROR) << "Failed to create depth shader program.";
+    return {};
+  }
+  return std::move(*program);
+}
+
 ShaderProgram CreateDepthVisualizerProgram() {
   auto program = ShaderProgram::CreateGraphics("glsl/fullscreen.vert",
                                                "glsl/depth_vis.frag");
@@ -155,6 +175,107 @@ void DrawDepth(const Scene& scene, const Camera& camera,
 
   // Restore State
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+  glDepthFunc(GL_LEQUAL);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void DrawDepthWNormal(const Scene& scene, const Camera& camera,
+                      const ShaderProgram& opaque_program,
+                      const ShaderProgram& cutout_program,
+                      const RenderTarget& target) {
+  if (!opaque_program || !cutout_program) return;
+
+  // Bind FBO
+  glBindFramebuffer(GL_FRAMEBUFFER, target.fbo);
+  glViewport(0, 0, target.width, target.height);
+
+  // Clear Depth
+  glClear(
+      GL_DEPTH_BUFFER_BIT);  // Ensure we also clear normal buffer if needed?
+                             // Yes, but glClear(GL_DEPTH_BUFFER_BIT) only
+                             // clears depth.
+  // We can clear normal buffer by clearing color attachment 0, or just let
+  // depth testing overwrite them appropriately since we don't blend. However,
+  // skybox pixels might not be written to. The normal buffer's alpha channel
+  // serves as skybox flag. So we must clear attachment 0 to alpha=0.
+  const float clear_normal[] = {0.0f, 0.0f, 0.0f, 0.0f};
+  glClearNamedFramebufferfv(target.fbo, GL_COLOR, 0, clear_normal);
+
+  // Enable Color Write on Attachment 0 (Normal texture)
+  glColorMaski(0, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+  // Enable Depth Test
+  glEnable(GL_DEPTH_TEST);
+  glDepthFunc(GL_LESS);
+
+  std::vector<const Geometry*> opaque_geos;
+  std::vector<const Geometry*> cutout_geos;
+  opaque_geos.reserve(scene.geometries.size());
+  cutout_geos.reserve(scene.geometries.size());
+
+  for (const auto& geo : scene.geometries) {
+    if (geo.vao == 0) continue;
+    if (geo.material_id >= 0 &&
+        static_cast<size_t>(geo.material_id) < scene.materials.size()) {
+      const auto& mat = scene.materials[geo.material_id];
+      if (mat.alpha_cutout) {
+        cutout_geos.push_back(&geo);
+      } else {
+        opaque_geos.push_back(&geo);
+      }
+    } else {
+      opaque_geos.push_back(&geo);
+    }
+  }
+
+  Eigen::Matrix4f view = GetViewMatrix(camera);
+
+  // Draw the opaque geometries.
+  opaque_program.Use();
+  opaque_program.Uniform("u_view_proj", GetViewProjMatrix(camera));
+  opaque_program.Uniform("u_view", view);
+
+  for (const Geometry* geo_ptr : opaque_geos) {
+    const Geometry& geo = *geo_ptr;
+    opaque_program.Uniform("u_model", geo.transform.matrix());
+
+    glBindVertexArray(geo.vao);
+    if (geo.index_count > 0) {
+      glDrawElements(GL_TRIANGLES, geo.index_count, GL_UNSIGNED_INT, nullptr);
+    } else {
+      glDrawArrays(GL_TRIANGLES, 0, geo.vertices.size());
+    }
+  }
+
+  // Draw the cutout geometries.
+  cutout_program.Use();
+  cutout_program.Uniform("u_view_proj", GetViewProjMatrix(camera));
+  cutout_program.Uniform("u_view", view);
+
+  for (const Geometry* geo_ptr : cutout_geos) {
+    const Geometry& geo = *geo_ptr;
+    cutout_program.Uniform("u_model", geo.transform.matrix());
+
+    // For cutout transparency, we need to bind the albedo texture.
+    if (geo.material_id >= 0 &&
+        static_cast<size_t>(geo.material_id) < scene.materials.size()) {
+      const auto& mat = scene.materials[geo.material_id];
+      glBindTextureUnit(0, mat.albedo.texture_id);
+    } else {
+      glBindTextureUnit(0, 0);
+    }
+
+    glBindVertexArray(geo.vao);
+    if (geo.index_count > 0) {
+      glDrawElements(GL_TRIANGLES, geo.index_count, GL_UNSIGNED_INT, nullptr);
+    } else {
+      glDrawArrays(GL_TRIANGLES, 0, geo.vertices.size());
+    }
+  }
+
+  // Restore State
+  glColorMaski(0, GL_TRUE, GL_TRUE, GL_TRUE,
+               GL_TRUE);  // restore mask for buffer 0
   glDepthFunc(GL_LEQUAL);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }

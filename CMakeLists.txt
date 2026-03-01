@@ -72,6 +72,7 @@ set(LIB_SOURCES
     src/culling.cpp
     src/draw_depth.cpp
     src/draw_radiance.cpp
+    src/draw_ssao.cpp
     src/draw_shadow_map.cpp
     src/draw_sky.cpp
     src/draw_tonemap.cpp

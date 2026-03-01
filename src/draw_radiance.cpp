@@ -33,6 +33,7 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
                        const std::vector<Cascade>& sun_cascades,
                        const RenderTarget& spot_shadow_atlas,
                        const TileLightListList& tile_light_list,
+                       const RenderTarget& ssao_target,
                        const ShaderProgram& program,
                        const RenderTarget& hdr_target) {
   if (!program) return;
@@ -64,6 +65,7 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
   glClear(GL_COLOR_BUFFER_BIT);
 
   // Z-Prepass State
+  glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LEQUAL);
   glDepthMask(GL_FALSE);
 
@@ -116,6 +118,13 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
     glBindTextureUnit(11, spot_shadow_atlas.depth_buffer);
   } else {
     glBindTextureUnit(11, 0);
+  }
+
+  // Bind SSAO texture
+  if (ssao_target.texture != 0) {
+    glBindTextureUnit(12, ssao_target.texture);
+  } else {
+    glBindTextureUnit(12, 0);
   }
 
   Eigen::Vector4f planes[6];
