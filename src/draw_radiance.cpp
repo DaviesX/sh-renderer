@@ -19,8 +19,9 @@ const char* kRadianceFragment = "glsl/radiance.frag";
 }  // namespace
 
 ShaderProgram CreateRadianceProgram() {
-  auto program =
-      ShaderProgram::CreateGraphics(kRadianceVertex, kRadianceFragment);
+  auto program = ShaderProgram::CreateGraphics(
+      kRadianceVertex, kRadianceFragment,
+      {{"NUM_CASCADES", std::to_string(kNumShadowMapCascades)}});
   if (!program) {
     LOG(FATAL) << "Failed to create radiance shader program.";
     return {};
@@ -42,7 +43,7 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
   // Bind Sun Shadow Maps and set uniforms
   if (!sun_cascades.empty() && !sun_shadow_maps.empty()) {
     for (size_t i = 0; i < sun_cascades.size(); ++i) {
-      if (i >= 3) break;  // Hardcoded limit in shader
+      if (i >= kNumShadowMapCascades) break;
 
       // Bind texture unit 5 + i
       glBindTextureUnit(5 + i, sun_shadow_maps[i].depth_buffer);

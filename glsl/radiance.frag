@@ -21,7 +21,6 @@ struct Light {
 uniform Light u_sun;
 
 // Shadows
-#define NUM_CASCADES 3
 layout(binding = 5) uniform sampler2DShadow u_sun_shadow_maps[NUM_CASCADES];
 uniform float u_sun_cascade_splits[NUM_CASCADES];
 uniform mat4 u_sun_cascade_view_projections[NUM_CASCADES];

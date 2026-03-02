@@ -218,12 +218,7 @@ void DrawSSAOVisualization(const RenderTarget& ssao,
   glBindFramebuffer(GL_FRAMEBUFFER, out.fbo);
 
   // Set Viewport based on target
-  if (out.fbo != 0) {
-    glViewport(0, 0, out.width, out.height);
-  } else {
-    // Or we assume full window. We'll use the ssao resolution.
-    glViewport(0, 0, ssao.width, ssao.height);
-  }
+  glViewport(0, 0, out.width, out.height);
 
   glDisable(GL_DEPTH_TEST);
   glClear(GL_COLOR_BUFFER_BIT);

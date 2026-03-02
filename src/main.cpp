@@ -83,6 +83,12 @@ void Run(const std::filesystem::path& scene_path) {
   // Initial Render Targets
   int initial_width, initial_height;
   glfwGetFramebufferSize(*window, &initial_width, &initial_height);
+  RenderTarget framebuffer_target;
+  framebuffer_target.fbo = 0;
+  framebuffer_target.texture = 0;
+  framebuffer_target.depth_buffer = 0;
+  framebuffer_target.width = initial_width;
+  framebuffer_target.height = initial_height;
   RenderTarget depth_normal_target =
       CreateDepthAndNormalTarget(initial_width, initial_height);
   RenderTarget hdr_target = CreateHDRTarget(initial_width, initial_height,
@@ -122,6 +128,9 @@ void Run(const std::filesystem::path& scene_path) {
 
     // Resize targets if needed
     if (fb_width != hdr_target.width || fb_height != hdr_target.height) {
+      framebuffer_target.width = fb_width;
+      framebuffer_target.height = fb_height;
+
       glDeleteFramebuffers(1, &depth_normal_target.fbo);
       glDeleteTextures(1, &depth_normal_target.normal_texture);
       glDeleteTextures(1, &depth_normal_target.depth_buffer);
@@ -179,8 +188,6 @@ void Run(const std::filesystem::path& scene_path) {
     DrawSSAOBlur(ssao_target, camera, ssao_blur_horizontal_program,
                  ssao_blur_vertical_program, depth_normal_target,
                  ssao_blur_temp, ssao_blur_target);
-
-    // glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
     // 1.5. Compute Light Culling (Forward+)
     ComputeTileLightList(camera, hdr_target, *scene, light_cull_program,

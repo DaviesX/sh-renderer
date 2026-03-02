@@ -32,6 +32,6 @@ void DrawSSAOBlur(const RenderTarget& ssao_in, const Camera& camera,
 
 void DrawSSAOVisualization(const RenderTarget& ssao,
                            const ShaderProgram& program,
-                           const RenderTarget& out = {});
+                           const RenderTarget& out);
 
 }  // namespace sh_renderer
