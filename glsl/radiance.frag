@@ -180,8 +180,6 @@ vec3 ComputeDirectBRDF(ShadingAngles angles, vec3 f0, vec3 albedo,
   float disney = DistributionDisney(angles, roughness);
   vec3 diffuse = kD * albedo / PI * disney;
 
-  // TODO: Fix the ORM textures so that they support occlusion.
-  // return occlusion * (diffuse + specular);
   return (diffuse + specular);
 }
 

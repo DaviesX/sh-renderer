@@ -11,11 +11,11 @@ layout(binding = 2) uniform sampler2D u_noise;
 uniform mat4 u_projection;
 uniform mat4 u_inv_projection;
 
-#define MAX_SAMPLES 64
+#define MAX_SAMPLES 32
 uniform vec3 u_samples[MAX_SAMPLES];
-uniform int u_kernel_size = 64;
-uniform float u_radius = 0.5;
-uniform float u_bias = 0.025;
+const int kKernelSize = MAX_SAMPLES;
+const float kRadius = .5f;
+const float kBias = 0.025;
 
 uniform vec2 u_resolution;
 
@@ -50,10 +50,10 @@ void main() {
   mat3 tbn = mat3(tangent, bitangent, normal);
 
   float occlusion = 0.0;
-  for (int i = 0; i < u_kernel_size; ++i) {
+  for (int i = 0; i < kKernelSize; ++i) {
     // get sample position
     vec3 sample_pos = tbn * u_samples[i];  // From tangent to view-space
-    sample_pos = view_pos + sample_pos * u_radius;
+    sample_pos = view_pos + sample_pos * kRadius;
 
     // project sample position (to sample texture)
     vec4 offset = vec4(sample_pos, 1.0);
@@ -72,11 +72,12 @@ void main() {
 
     // range check & accumulate
     float range_check =
-        smoothstep(0.0, 1.0, u_radius / abs(view_pos.z - actual_sample_z));
+        smoothstep(0.0, 1.0, kRadius / abs(view_pos.z - actual_sample_z));
     occlusion +=
-        (actual_sample_z >= sample_pos.z + u_bias ? 1.0 : 0.0) * range_check;
+        (actual_sample_z >= sample_pos.z + kBias ? 1.0 : 0.0) * range_check;
   }
 
-  occlusion = 1.0 - (occlusion / float(u_kernel_size));
+  occlusion = 1.0 - (occlusion / float(kKernelSize));
   out_occlusion = occlusion;
+  // out_occlusion = 1.f;
 }

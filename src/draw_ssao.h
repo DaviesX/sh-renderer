@@ -10,6 +10,7 @@ namespace sh_renderer {
 
 ShaderProgram CreateSSAOProgram();
 ShaderProgram CreateSSAOBlurProgram();
+ShaderProgram CreateSSAOVisualizerProgram();
 
 struct SSAOContext {
   GLuint noise_texture = 0;
@@ -23,8 +24,13 @@ void DrawSSAO(const RenderTarget& depth_normal_target, const Camera& camera,
               const ShaderProgram& ssao_program, const SSAOContext& context,
               const RenderTarget& ssao_out);
 
-void DrawSSAOBlur(const RenderTarget& ssao_in,
+void DrawSSAOBlur(const RenderTarget& ssao_in, const Camera& camera,
                   const ShaderProgram& blur_program,
-                  const RenderTarget& blur_out);
+                  const RenderTarget& depth_normal_target,
+                  const RenderTarget& blur_temp, const RenderTarget& blur_out);
+
+void DrawSSAOVisualization(const RenderTarget& ssao,
+                           const ShaderProgram& program,
+                           const RenderTarget& out = {});
 
 }  // namespace sh_renderer

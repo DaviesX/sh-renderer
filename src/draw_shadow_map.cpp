@@ -135,8 +135,9 @@ void DrawCascadedShadowMap(
   glDepthFunc(GL_LEQUAL);
   // Disable Color mask
   glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-  glEnable(GL_CULL_FACE);
-  glCullFace(GL_BACK);
+  // glEnable(GL_CULL_FACE);
+  // glCullFace(GL_BACK);
+  glDisable(GL_CULL_FACE);
 
   std::vector<const Geometry*> opaque_geos;
   std::vector<const Geometry*> cutout_geos;
@@ -223,8 +224,9 @@ void DrawShadowAtlas(Scene& scene, const ShaderProgram& opaque_program,
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LEQUAL);
   glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-  glEnable(GL_CULL_FACE);
-  glCullFace(GL_BACK);
+  // glEnable(GL_CULL_FACE);
+  // glCullFace(GL_BACK);
+  glDisable(GL_CULL_FACE);
 
   std::vector<const Geometry*> opaque_geos;
   std::vector<const Geometry*> cutout_geos;

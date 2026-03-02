@@ -10,6 +10,8 @@ namespace sh_renderer {
 
 namespace {
 
+constexpr unsigned int kKernelSize = 32;
+
 GLuint GetFullscreenQuadVAO() {
   static GLuint vao = 0;
   if (vao == 0) {
@@ -56,10 +58,20 @@ ShaderProgram CreateSSAOProgram() {
 }
 
 ShaderProgram CreateSSAOBlurProgram() {
-  auto program =
-      ShaderProgram::CreateGraphics("glsl/fullscreen.vert", "glsl/blur.frag");
+  auto program = ShaderProgram::CreateGraphics("glsl/fullscreen.vert",
+                                               "glsl/bilateral_blur.frag");
   if (!program) {
     LOG(ERROR) << "Failed to create SSAO blur shader program.";
+    return {};
+  }
+  return std::move(*program);
+}
+
+ShaderProgram CreateSSAOVisualizerProgram() {
+  auto program = ShaderProgram::CreateGraphics("glsl/fullscreen.vert",
+                                               "glsl/ssao_vis.frag");
+  if (!program) {
+    LOG(ERROR) << "Failed to create SSAO visualizer program.";
     return {};
   }
   return std::move(*program);
@@ -71,13 +83,13 @@ SSAOContext CreateSSAOContext() {
       0.0, 1.0);  // random floats between 0.0 - 1.0
   std::default_random_engine generator;
 
-  for (unsigned int i = 0; i < 64; ++i) {
+  for (unsigned int i = 0; i < kKernelSize; ++i) {
     Eigen::Vector3f sample(random_floats(generator) * 2.0 - 1.0,
                            random_floats(generator) * 2.0 - 1.0,
                            random_floats(generator));
     sample.normalize();
     sample *= random_floats(generator);
-    float scale = float(i) / 64.0;
+    float scale = float(i) / float(kKernelSize);
     // Scale samples s.t. they're more aligned to center of kernel
     scale = Lerp(0.1f, 1.0f, scale * scale);
     sample *= scale;
@@ -138,7 +150,7 @@ void DrawSSAO(const RenderTarget& depth_normal_target, const Camera& camera,
   glUniform2f(glGetUniformLocation(ssao_program.id(), "u_resolution"),
               ssao_out.width, ssao_out.height);
 
-  for (unsigned int i = 0; i < 64; ++i) {
+  for (unsigned int i = 0; i < kKernelSize; ++i) {
     ssao_program.Uniform("u_samples[" + std::to_string(i) + "]",
                          context.kernel[i]);
   }
@@ -151,23 +163,72 @@ void DrawSSAO(const RenderTarget& depth_normal_target, const Camera& camera,
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void DrawSSAOBlur(const RenderTarget& ssao_in,
+void DrawSSAOBlur(const RenderTarget& ssao_in, const Camera& camera,
                   const ShaderProgram& blur_program,
-                  const RenderTarget& blur_out) {
-  glBindFramebuffer(GL_FRAMEBUFFER, blur_out.fbo);
-  glViewport(0, 0, blur_out.width, blur_out.height);
+                  const RenderTarget& depth_normal_target,
+                  const RenderTarget& blur_temp, const RenderTarget& blur_out) {
+  // Horizontal pass
+  glBindFramebuffer(GL_FRAMEBUFFER, blur_temp.fbo);
+  glViewport(0, 0, blur_temp.width, blur_temp.height);
   glClear(GL_COLOR_BUFFER_BIT);
   glDisable(GL_DEPTH_TEST);
 
   blur_program.Use();
+  glUniform1i(glGetUniformLocation(blur_program.id(), "u_horizontal"), 1);
+  blur_program.Uniform("u_z_near", camera.intrinsics.z_near);
+  blur_program.Uniform("u_z_far", camera.intrinsics.z_far);
 
-  // Bind SSAO texture to binding 0
+  // Bind unblurred SSAO texture to binding 0
   glBindTextureUnit(0, ssao_in.texture);
+  glBindTextureUnit(1, depth_normal_target.depth_buffer);
+  glBindTextureUnit(2, depth_normal_target.normal_texture);
 
   glBindVertexArray(GetFullscreenQuadVAO());
   glDrawArrays(GL_TRIANGLES, 0, 6);
 
+  // Vertical pass
+  glBindFramebuffer(GL_FRAMEBUFFER, blur_out.fbo);
+  glViewport(0, 0, blur_out.width, blur_out.height);
+  glClear(GL_COLOR_BUFFER_BIT);
+
+  glUniform1i(glGetUniformLocation(blur_program.id(), "u_horizontal"), 0);
+
+  // Bind horizontally blurred SSAO texture to binding 0
+  glBindTextureUnit(0, blur_temp.texture);
+  // depth and normal are already bound to 1 and 2
+
+  glDrawArrays(GL_TRIANGLES, 0, 6);
+
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void DrawSSAOVisualization(const RenderTarget& ssao,
+                           const ShaderProgram& program,
+                           const RenderTarget& out) {
+  if (!program) return;
+
+  // Bind Output FBO (or default)
+  glBindFramebuffer(GL_FRAMEBUFFER, out.fbo);
+
+  // Set Viewport based on target
+  if (out.fbo != 0) {
+    glViewport(0, 0, out.width, out.height);
+  } else {
+    // Or we assume full window. We'll use the ssao resolution.
+    glViewport(0, 0, ssao.width, ssao.height);
+  }
+
+  glDisable(GL_DEPTH_TEST);
+  glClear(GL_COLOR_BUFFER_BIT);
+
+  program.Use();
+
+  // Bind SSAO Texture
+  glBindTextureUnit(0, ssao.texture);
+  program.Uniform("u_ssao", 0);
+
+  glBindVertexArray(GetFullscreenQuadVAO());
+  glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
 }  // namespace sh_renderer

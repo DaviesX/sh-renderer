@@ -67,12 +67,14 @@ void Run(const std::filesystem::path& scene_path) {
   ShaderProgram light_cull_program = CreateLightCullProgram();
   ShaderProgram ssao_program = CreateSSAOProgram();
   ShaderProgram ssao_blur_program = CreateSSAOBlurProgram();
+  ShaderProgram ssao_vis_program = CreateSSAOVisualizerProgram();
 
   if (!cascaded_shadow_map_opaque_program ||
       !cascaded_shadow_map_cutout_program || !depth_opaque_program ||
       !depth_cutout_program || !depth_vis_program || !shadow_vis_program ||
       !radiance_program || !sky_program || !tonemap_program ||
-      !light_cull_program || !ssao_program || !ssao_blur_program) {
+      !light_cull_program || !ssao_program || !ssao_blur_program ||
+      !ssao_vis_program) {
     LOG(ERROR) << "Failed to create shader programs.";
     return;
   }
@@ -93,6 +95,7 @@ void Run(const std::filesystem::path& scene_path) {
 
   SSAOContext ssao_ctx = CreateSSAOContext();
   RenderTarget ssao_target = CreateSSAOTarget(initial_width, initial_height);
+  RenderTarget ssao_blur_temp = CreateSSAOTarget(initial_width, initial_height);
   RenderTarget ssao_blur_target =
       CreateSSAOTarget(initial_width, initial_height);
 
@@ -132,6 +135,10 @@ void Run(const std::filesystem::path& scene_path) {
       glDeleteTextures(1, &ssao_target.texture);
       ssao_target = CreateSSAOTarget(fb_width, fb_height);
 
+      glDeleteFramebuffers(1, &ssao_blur_temp.fbo);
+      glDeleteTextures(1, &ssao_blur_temp.texture);
+      ssao_blur_temp = CreateSSAOTarget(fb_width, fb_height);
+
       glDeleteFramebuffers(1, &ssao_blur_target.fbo);
       glDeleteTextures(1, &ssao_blur_target.texture);
       ssao_blur_target = CreateSSAOTarget(fb_width, fb_height);
@@ -168,16 +175,16 @@ void Run(const std::filesystem::path& scene_path) {
 
     // 1.2 SSAO Pass
     DrawSSAO(depth_normal_target, camera, ssao_program, ssao_ctx, ssao_target);
-    DrawSSAOBlur(ssao_target, ssao_blur_program, ssao_blur_target);
+    DrawSSAOBlur(ssao_target, camera, ssao_blur_program, depth_normal_target,
+                 ssao_blur_temp, ssao_blur_target);
 
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    // glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
     // 1.5. Compute Light Culling (Forward+)
     ComputeTileLightList(camera, hdr_target, *scene, light_cull_program,
                          &tile_light_list);
 
     // 2. Radiance Pass (Forward PBR)
-
     // DrawRadiance will handle clearing color, setting LEQUAL, etc.
     DrawSceneRadiance(*scene, camera, sun_shadow_map_targets, sun_cascades,
                       spot_shadow_atlas, tile_light_list, ssao_blur_target,
@@ -220,6 +227,8 @@ void Run(const std::filesystem::path& scene_path) {
 
   glDeleteFramebuffers(1, &ssao_target.fbo);
   glDeleteTextures(1, &ssao_target.texture);
+  glDeleteFramebuffers(1, &ssao_blur_temp.fbo);
+  glDeleteTextures(1, &ssao_blur_temp.texture);
   glDeleteFramebuffers(1, &ssao_blur_target.fbo);
   glDeleteTextures(1, &ssao_blur_target.texture);
   DestroySSAOContext(&ssao_ctx);
