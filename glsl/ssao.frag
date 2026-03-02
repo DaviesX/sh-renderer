@@ -55,13 +55,14 @@ void main() {
     sample_pos = view_pos + sample_pos * kRadius;
 
     // project sample position (to sample texture)
-    vec4 offset = vec4(sample_pos, 1.0);
-    offset = u_projection * offset;       // from view to clip-space
-    offset.xyz /= offset.w;               // perspective divide
-    offset.xyz = offset.xyz * 0.5 + 0.5;  // transform to range 0.0 - 1.0
+    vec2 offset = vec2(
+        u_projection[0][0] * sample_pos.x + u_projection[2][0] * sample_pos.z,
+        u_projection[1][1] * sample_pos.y + u_projection[2][1] * sample_pos.z);
+    offset /= -sample_pos.z;      // perspective divide
+    offset = offset * 0.5 + 0.5;  // transform to range 0.0 - 1.0
 
     // get sample depth
-    float sample_depth = texture(u_depth, offset.xy).r;
+    float sample_depth = texture(u_depth, offset).r;
 
     // Reconstruct Z for depth comparison
     float sample_ndc_z = sample_depth * 2.0 - 1.0;
