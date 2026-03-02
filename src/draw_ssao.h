@@ -9,7 +9,7 @@
 namespace sh_renderer {
 
 ShaderProgram CreateSSAOProgram();
-ShaderProgram CreateSSAOBlurProgram();
+ShaderProgram CreateSSAOBlurProgram(bool horizontal);
 ShaderProgram CreateSSAOVisualizerProgram();
 
 struct SSAOContext {
@@ -25,7 +25,8 @@ void DrawSSAO(const RenderTarget& depth_normal_target, const Camera& camera,
               const RenderTarget& ssao_out);
 
 void DrawSSAOBlur(const RenderTarget& ssao_in, const Camera& camera,
-                  const ShaderProgram& blur_program,
+                  const ShaderProgram& blur_horizontal_program,
+                  const ShaderProgram& blur_vertical_program,
                   const RenderTarget& depth_normal_target,
                   const RenderTarget& blur_temp, const RenderTarget& blur_out);
 

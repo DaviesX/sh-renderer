@@ -48,8 +48,9 @@ float Lerp(float a, float b, float f) { return a + f * (b - a); }
 }  // namespace
 
 ShaderProgram CreateSSAOProgram() {
-  auto program =
-      ShaderProgram::CreateGraphics("glsl/fullscreen.vert", "glsl/ssao.frag");
+  auto program = ShaderProgram::CreateGraphics(
+      "glsl/fullscreen.vert", "glsl/ssao.frag",
+      {{"MAX_SAMPLES", std::to_string(kKernelSize)}});
   if (!program) {
     LOG(ERROR) << "Failed to create SSAO shader program.";
     return {};
@@ -57,9 +58,13 @@ ShaderProgram CreateSSAOProgram() {
   return std::move(*program);
 }
 
-ShaderProgram CreateSSAOBlurProgram() {
-  auto program = ShaderProgram::CreateGraphics("glsl/fullscreen.vert",
-                                               "glsl/bilateral_blur.frag");
+ShaderProgram CreateSSAOBlurProgram(bool horizontal) {
+  std::map<std::string, std::string> macros;
+  if (horizontal) {
+    macros["HORIZONTAL"] = "1";
+  }
+  auto program = ShaderProgram::CreateGraphics(
+      "glsl/fullscreen.vert", "glsl/bilateral_blur.frag", macros);
   if (!program) {
     LOG(ERROR) << "Failed to create SSAO blur shader program.";
     return {};
@@ -147,8 +152,8 @@ void DrawSSAO(const RenderTarget& depth_normal_target, const Camera& camera,
   ssao_program.Uniform("u_projection", GetProjectionMatrix(camera));
   ssao_program.Uniform("u_inv_projection",
                        GetProjectionMatrix(camera).inverse().eval());
-  glUniform2f(glGetUniformLocation(ssao_program.id(), "u_resolution"),
-              ssao_out.width, ssao_out.height);
+  ssao_program.Uniform("u_resolution",
+                       Eigen::Vector2f(ssao_out.width, ssao_out.height));
 
   for (unsigned int i = 0; i < kKernelSize; ++i) {
     ssao_program.Uniform("u_samples[" + std::to_string(i) + "]",
@@ -164,7 +169,8 @@ void DrawSSAO(const RenderTarget& depth_normal_target, const Camera& camera,
 }
 
 void DrawSSAOBlur(const RenderTarget& ssao_in, const Camera& camera,
-                  const ShaderProgram& blur_program,
+                  const ShaderProgram& blur_horizontal_program,
+                  const ShaderProgram& blur_vertical_program,
                   const RenderTarget& depth_normal_target,
                   const RenderTarget& blur_temp, const RenderTarget& blur_out) {
   // Horizontal pass
@@ -173,10 +179,9 @@ void DrawSSAOBlur(const RenderTarget& ssao_in, const Camera& camera,
   glClear(GL_COLOR_BUFFER_BIT);
   glDisable(GL_DEPTH_TEST);
 
-  blur_program.Use();
-  glUniform1i(glGetUniformLocation(blur_program.id(), "u_horizontal"), 1);
-  blur_program.Uniform("u_z_near", camera.intrinsics.z_near);
-  blur_program.Uniform("u_z_far", camera.intrinsics.z_far);
+  blur_horizontal_program.Use();
+  blur_horizontal_program.Uniform("u_z_near", camera.intrinsics.z_near);
+  blur_horizontal_program.Uniform("u_z_far", camera.intrinsics.z_far);
 
   // Bind unblurred SSAO texture to binding 0
   glBindTextureUnit(0, ssao_in.texture);
@@ -191,7 +196,9 @@ void DrawSSAOBlur(const RenderTarget& ssao_in, const Camera& camera,
   glViewport(0, 0, blur_out.width, blur_out.height);
   glClear(GL_COLOR_BUFFER_BIT);
 
-  glUniform1i(glGetUniformLocation(blur_program.id(), "u_horizontal"), 0);
+  blur_vertical_program.Use();
+  blur_vertical_program.Uniform("u_z_near", camera.intrinsics.z_near);
+  blur_vertical_program.Uniform("u_z_far", camera.intrinsics.z_far);
 
   // Bind horizontally blurred SSAO texture to binding 0
   glBindTextureUnit(0, blur_temp.texture);

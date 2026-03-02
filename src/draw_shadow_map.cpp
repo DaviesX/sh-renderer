@@ -13,8 +13,8 @@
 namespace sh_renderer {
 
 ShaderProgram CreateShadowMapOpaqueProgram() {
-  auto program = ShaderProgram::CreateGraphics("glsl/depth_opaque.vert",
-                                               "glsl/depth_opaque.frag");
+  auto program =
+      ShaderProgram::CreateGraphics("glsl/depth.vert", "glsl/depth.frag");
   if (!program) {
     LOG(ERROR) << "Failed to create opaque shadow map program.";
     return {};
@@ -23,8 +23,8 @@ ShaderProgram CreateShadowMapOpaqueProgram() {
 }
 
 ShaderProgram CreateShadowMapCutoutProgram() {
-  auto program = ShaderProgram::CreateGraphics("glsl/depth_cutout.vert",
-                                               "glsl/depth_cutout.frag");
+  auto program = ShaderProgram::CreateGraphics(
+      "glsl/depth.vert", "glsl/depth.frag", {{"CUTOUT", "1"}});
   if (!program) {
     LOG(ERROR) << "Failed to create cutout shadow map program.";
     return {};

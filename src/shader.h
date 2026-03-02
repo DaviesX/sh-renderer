@@ -2,6 +2,7 @@
 
 #include <Eigen/Core>
 #include <filesystem>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -27,18 +28,21 @@ class ShaderProgram {
   // Loads and compiles a compute shader from a file.
   // Returns std::nullopt on failure.
   static std::optional<ShaderProgram> CreateCompute(
-      const std::filesystem::path& compute_path);
+      const std::filesystem::path& compute_path,
+      const std::map<std::string, std::string>& macros = {});
 
   // Loads and compiles a graphics pipeline (vertex + fragment) from files.
   // Returns std::nullopt on failure.
   static std::optional<ShaderProgram> CreateGraphics(
       const std::filesystem::path& vertex_path,
-      const std::filesystem::path& fragment_path);
+      const std::filesystem::path& fragment_path,
+      const std::map<std::string, std::string>& macros = {});
 
   // Loads and compiles a graphics pipeline (vertex + fragment) from source
   // strings. Returns std::nullopt on failure.
   static std::optional<ShaderProgram> CreateFromSource(
-      std::string_view vertex_source, std::string_view fragment_source);
+      std::string_view vertex_source, std::string_view fragment_source,
+      const std::map<std::string, std::string>& macros = {});
 
   // Checks if the program is valid.
   explicit operator bool() const { return id_ != 0; }
@@ -46,6 +50,8 @@ class ShaderProgram {
   // Sets a uniform value by name.
   void Uniform(std::string_view name, int value) const;
   void Uniform(std::string_view name, float value) const;
+  void Uniform(std::string_view name, const Eigen::Vector2i& value) const;
+  void Uniform(std::string_view name, const Eigen::Vector2f& value) const;
   void Uniform(std::string_view name, const Eigen::Vector3f& value) const;
   void Uniform(std::string_view name, const Eigen::Matrix4f& value) const;
 

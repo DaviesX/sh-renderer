@@ -7,7 +7,6 @@ layout(binding = 0) uniform sampler2D u_ssao_input;
 layout(binding = 1) uniform sampler2D u_depth;
 layout(binding = 2) uniform sampler2D u_normal;
 
-uniform bool u_horizontal;
 uniform float u_z_near;
 uniform float u_z_far;
 
@@ -31,11 +30,11 @@ void main() {
 
   for (int i = -blur_radius; i <= blur_radius; ++i) {
     vec2 offset = vec2(0.0);
-    if (u_horizontal) {
-      offset = vec2(float(i) * texel_size.x, 0.0);
-    } else {
-      offset = vec2(0.0, float(i) * texel_size.y);
-    }
+#ifdef HORIZONTAL
+    offset = vec2(float(i) * texel_size.x, 0.0);
+#else
+    offset = vec2(0.0, float(i) * texel_size.y);
+#endif
 
     vec2 sample_uv = v_uv + offset;
     float sample_depth_nl = texture(u_depth, sample_uv).r;

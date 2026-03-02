@@ -66,15 +66,16 @@ void Run(const std::filesystem::path& scene_path) {
   ShaderProgram tonemap_program = CreateTonemapProgram();
   ShaderProgram light_cull_program = CreateLightCullProgram();
   ShaderProgram ssao_program = CreateSSAOProgram();
-  ShaderProgram ssao_blur_program = CreateSSAOBlurProgram();
+  ShaderProgram ssao_blur_horizontal_program = CreateSSAOBlurProgram(true);
+  ShaderProgram ssao_blur_vertical_program = CreateSSAOBlurProgram(false);
   ShaderProgram ssao_vis_program = CreateSSAOVisualizerProgram();
 
   if (!cascaded_shadow_map_opaque_program ||
       !cascaded_shadow_map_cutout_program || !depth_opaque_program ||
       !depth_cutout_program || !depth_vis_program || !shadow_vis_program ||
       !radiance_program || !sky_program || !tonemap_program ||
-      !light_cull_program || !ssao_program || !ssao_blur_program ||
-      !ssao_vis_program) {
+      !light_cull_program || !ssao_program || !ssao_blur_horizontal_program ||
+      !ssao_blur_vertical_program || !ssao_vis_program) {
     LOG(ERROR) << "Failed to create shader programs.";
     return;
   }
@@ -175,7 +176,8 @@ void Run(const std::filesystem::path& scene_path) {
 
     // 1.2 SSAO Pass
     DrawSSAO(depth_normal_target, camera, ssao_program, ssao_ctx, ssao_target);
-    DrawSSAOBlur(ssao_target, camera, ssao_blur_program, depth_normal_target,
+    DrawSSAOBlur(ssao_target, camera, ssao_blur_horizontal_program,
+                 ssao_blur_vertical_program, depth_normal_target,
                  ssao_blur_temp, ssao_blur_target);
 
     // glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);

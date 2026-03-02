@@ -96,11 +96,11 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
 
   // Forward+ tile info.
   BindTileLightList(scene, tile_light_list);
-  GLint tile_count_loc = glGetUniformLocation(program.id(), "u_tile_count");
-  glUniform2i(tile_count_loc, tile_light_list.tile_count_x,
-              tile_light_list.tile_count_y);
-  GLint screen_size_loc = glGetUniformLocation(program.id(), "u_screen_size");
-  glUniform2i(screen_size_loc, hdr_target.width, hdr_target.height);
+  program.Uniform("u_tile_count",
+                  Eigen::Vector2i(tile_light_list.tile_count_x,
+                                  tile_light_list.tile_count_y));
+  program.Uniform("u_screen_size",
+                  Eigen::Vector2i(hdr_target.width, hdr_target.height));
 
   // Bind Lightmap Textures
   if (scene.lightmaps_packed[0].texture_id != 0) {

@@ -11,7 +11,6 @@ layout(binding = 2) uniform sampler2D u_noise;
 uniform mat4 u_projection;
 uniform mat4 u_inv_projection;
 
-#define MAX_SAMPLES 32
 uniform vec3 u_samples[MAX_SAMPLES];
 const int kKernelSize = MAX_SAMPLES;
 const float kRadius = .5f;
@@ -79,5 +78,4 @@ void main() {
 
   occlusion = 1.0 - (occlusion / float(kKernelSize));
   out_occlusion = occlusion;
-  // out_occlusion = 1.f;
 }

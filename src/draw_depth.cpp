@@ -43,8 +43,8 @@ GLuint GetQuadVAO() {
 }  // namespace
 
 ShaderProgram CreateDepthOpaqueProgram() {
-  auto program = ShaderProgram::CreateGraphics("glsl/depth_opaque.vert",
-                                               "glsl/depth_opaque.frag");
+  auto program =
+      ShaderProgram::CreateGraphics("glsl/depth.vert", "glsl/depth.frag");
   if (!program) {
     LOG(ERROR) << "Failed to create depth shader program.";
     return {};
@@ -53,8 +53,8 @@ ShaderProgram CreateDepthOpaqueProgram() {
 }
 
 ShaderProgram CreateDepthCutoutProgram() {
-  auto program = ShaderProgram::CreateGraphics("glsl/depth_cutout.vert",
-                                               "glsl/depth_cutout.frag");
+  auto program = ShaderProgram::CreateGraphics(
+      "glsl/depth.vert", "glsl/depth.frag", {{"CUTOUT", "1"}});
   if (!program) {
     LOG(ERROR) << "Failed to create depth shader program.";
     return {};
@@ -63,8 +63,8 @@ ShaderProgram CreateDepthCutoutProgram() {
 }
 
 ShaderProgram CreateDepthOpaqueWNormalProgram() {
-  auto program = ShaderProgram::CreateGraphics(
-      "glsl/depth_opaque_w_normal.vert", "glsl/depth_opaque_w_normal.frag");
+  auto program = ShaderProgram::CreateGraphics("glsl/depth_w_normal.vert",
+                                               "glsl/depth_w_normal.frag");
   if (!program) {
     LOG(ERROR) << "Failed to create depth shader program.";
     return {};
@@ -73,8 +73,9 @@ ShaderProgram CreateDepthOpaqueWNormalProgram() {
 }
 
 ShaderProgram CreateDepthCutoutWNormalProgram() {
-  auto program = ShaderProgram::CreateGraphics(
-      "glsl/depth_cutout_w_normal.vert", "glsl/depth_cutout_w_normal.frag");
+  auto program = ShaderProgram::CreateGraphics("glsl/depth_w_normal.vert",
+                                               "glsl/depth_w_normal.frag",
+                                               {{"CUTOUT", "1"}});
   if (!program) {
     LOG(ERROR) << "Failed to create depth shader program.";
     return {};
