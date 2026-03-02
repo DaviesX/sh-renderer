@@ -107,9 +107,9 @@ void ComputeTileLightList(const Camera& camera, const RenderTarget& hdr_target,
   cull_program.Uniform("u_inv_projection", inv_projection);
   cull_program.Uniform("u_view", view);
 
-  // u_screen_size is ivec2 — use glUniform2i directly.
-  GLint loc = glGetUniformLocation(cull_program.id(), "u_screen_size");
-  glUniform2i(loc, hdr_target.width, hdr_target.height);
+  // u_screen_size is ivec2
+  cull_program.Uniform("u_screen_size",
+                       Eigen::Vector2i(hdr_target.width, hdr_target.height));
 
   // Dispatch.
   glDispatchCompute(tile_light_list->tile_count_x,

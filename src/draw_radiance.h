@@ -27,6 +27,7 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
                        const std::vector<Cascade>& sun_cascades,
                        const RenderTarget& spot_shadow_atlas,
                        const TileLightListList& tile_light_list,
+                       const RenderTarget& ssao_target,
                        const ShaderProgram& program,
                        const RenderTarget& hdr_target);
 

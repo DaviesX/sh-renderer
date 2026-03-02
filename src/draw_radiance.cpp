@@ -19,8 +19,9 @@ const char* kRadianceFragment = "glsl/radiance.frag";
 }  // namespace
 
 ShaderProgram CreateRadianceProgram() {
-  auto program =
-      ShaderProgram::CreateGraphics(kRadianceVertex, kRadianceFragment);
+  auto program = ShaderProgram::CreateGraphics(
+      kRadianceVertex, kRadianceFragment,
+      {{"NUM_CASCADES", std::to_string(kNumShadowMapCascades)}});
   if (!program) {
     LOG(FATAL) << "Failed to create radiance shader program.";
     return {};
@@ -33,6 +34,7 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
                        const std::vector<Cascade>& sun_cascades,
                        const RenderTarget& spot_shadow_atlas,
                        const TileLightListList& tile_light_list,
+                       const RenderTarget& ssao_target,
                        const ShaderProgram& program,
                        const RenderTarget& hdr_target) {
   if (!program) return;
@@ -41,7 +43,7 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
   // Bind Sun Shadow Maps and set uniforms
   if (!sun_cascades.empty() && !sun_shadow_maps.empty()) {
     for (size_t i = 0; i < sun_cascades.size(); ++i) {
-      if (i >= 3) break;  // Hardcoded limit in shader
+      if (i >= kNumShadowMapCascades) break;
 
       // Bind texture unit 5 + i
       glBindTextureUnit(5 + i, sun_shadow_maps[i].depth_buffer);
@@ -64,6 +66,7 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
   glClear(GL_COLOR_BUFFER_BIT);
 
   // Z-Prepass State
+  glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LEQUAL);
   glDepthMask(GL_FALSE);
 
@@ -94,11 +97,11 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
 
   // Forward+ tile info.
   BindTileLightList(scene, tile_light_list);
-  GLint tile_count_loc = glGetUniformLocation(program.id(), "u_tile_count");
-  glUniform2i(tile_count_loc, tile_light_list.tile_count_x,
-              tile_light_list.tile_count_y);
-  GLint screen_size_loc = glGetUniformLocation(program.id(), "u_screen_size");
-  glUniform2i(screen_size_loc, hdr_target.width, hdr_target.height);
+  program.Uniform("u_tile_count",
+                  Eigen::Vector2i(tile_light_list.tile_count_x,
+                                  tile_light_list.tile_count_y));
+  program.Uniform("u_screen_size",
+                  Eigen::Vector2i(hdr_target.width, hdr_target.height));
 
   // Bind Lightmap Textures
   if (scene.lightmaps_packed[0].texture_id != 0) {
@@ -116,6 +119,13 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
     glBindTextureUnit(11, spot_shadow_atlas.depth_buffer);
   } else {
     glBindTextureUnit(11, 0);
+  }
+
+  // Bind SSAO texture
+  if (ssao_target.texture != 0) {
+    glBindTextureUnit(12, ssao_target.texture);
+  } else {
+    glBindTextureUnit(12, 0);
   }
 
   Eigen::Vector4f planes[6];

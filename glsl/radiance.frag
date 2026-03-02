@@ -21,7 +21,6 @@ struct Light {
 uniform Light u_sun;
 
 // Shadows
-#define NUM_CASCADES 3
 layout(binding = 5) uniform sampler2DShadow u_sun_shadow_maps[NUM_CASCADES];
 uniform float u_sun_cascade_splits[NUM_CASCADES];
 uniform mat4 u_sun_cascade_view_projections[NUM_CASCADES];
@@ -38,6 +37,7 @@ layout(binding = 8) uniform sampler2D u_PackedTex0;
 layout(binding = 9) uniform sampler2D u_PackedTex1;
 layout(binding = 10) uniform sampler2D u_PackedTex2;
 layout(binding = 11) uniform sampler2DShadow u_spot_shadow_atlas;
+layout(binding = 12) uniform sampler2D u_ssao;
 
 uniform vec3 u_emissive_factor;
 uniform float u_emissive_strength;
@@ -179,8 +179,6 @@ vec3 ComputeDirectBRDF(ShadingAngles angles, vec3 f0, vec3 albedo,
   float disney = DistributionDisney(angles, roughness);
   vec3 diffuse = kD * albedo / PI * disney;
 
-  // TODO: Fix the ORM textures so that they support occlusion.
-  // return occlusion * (diffuse + specular);
   return (diffuse + specular);
 }
 
@@ -423,6 +421,10 @@ void main() {
   vec3 l_indirect = ComputeIndirectBRDF(angles, indirect_irradiance,
                                         indirect_reflection_radiance, f0,
                                         albedo, metallic, roughness, occlusion);
+
+  vec2 ssao_uv = gl_FragCoord.xy / vec2(u_screen_size);
+  float ssao_occlusion = texture(u_ssao, ssao_uv).r;
+  l_indirect *= ssao_occlusion;
 
   // Emission
   vec3 l_emission = u_emissive_strength * u_emissive_factor;
