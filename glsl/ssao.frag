@@ -64,14 +64,13 @@ void main() {
     float sample_depth = texture(u_depth, offset.xy).r;
 
     // Reconstruct Z for depth comparison
-    vec4 sample_clip_pos =
-        vec4(offset.xy * 2.0 - 1.0, sample_depth * 2.0 - 1.0, 1.0);
-    vec4 sample_view_h = u_inv_projection * sample_clip_pos;
-    float actual_sample_z = (sample_view_h.xyz / sample_view_h.w).z;
+    float sample_ndc_z = sample_depth * 2.0 - 1.0;
+    float actual_sample_z =
+        -u_projection[3][2] / (sample_ndc_z + u_projection[2][2]);
 
     // range check & accumulate
-    float range_check =
-        smoothstep(0.0, 1.0, kRadius / abs(view_pos.z - actual_sample_z));
+    float depth_diff = abs(view_pos.z - actual_sample_z);
+    float range_check = smoothstep(0.0, 1.0, 1.0 - (depth_diff / kRadius));
     occlusion +=
         (actual_sample_z >= sample_pos.z + kBias ? 1.0 : 0.0) * range_check;
   }
