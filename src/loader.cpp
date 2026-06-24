@@ -370,6 +370,109 @@ void LoadTexture(const tinygltf::Model& model, int tex_idx,
   }
 }
 
+// --- SH_material_layers parsing (mirrors sh-baker/src/layer_composite.cpp +
+// sh-baker/src/loader.cpp so the GLSL compositor can match the baker at t=0). ---
+
+BlendFactor ParseBlendFactor(const std::string& name) {
+  if (name == "ZERO") return BlendFactor::kZero;
+  if (name == "ONE") return BlendFactor::kOne;
+  if (name == "SRC_COLOR") return BlendFactor::kSrcColor;
+  if (name == "ONE_MINUS_SRC_COLOR") return BlendFactor::kOneMinusSrcColor;
+  if (name == "DST_COLOR") return BlendFactor::kDstColor;
+  if (name == "ONE_MINUS_DST_COLOR") return BlendFactor::kOneMinusDstColor;
+  if (name == "SRC_ALPHA") return BlendFactor::kSrcAlpha;
+  if (name == "ONE_MINUS_SRC_ALPHA") return BlendFactor::kOneMinusSrcAlpha;
+  if (name == "DST_ALPHA") return BlendFactor::kDstAlpha;
+  if (name == "ONE_MINUS_DST_ALPHA") return BlendFactor::kOneMinusDstAlpha;
+  LOG(WARNING) << "Unknown blend factor '" << name << "', defaulting to ONE";
+  return BlendFactor::kOne;
+}
+
+WaveType ParseWaveType(const std::string& name) {
+  if (name == "TRIANGLE") return WaveType::kTriangle;
+  if (name == "SQUARE") return WaveType::kSquare;
+  if (name == "SAWTOOTH") return WaveType::kSawtooth;
+  if (name == "INVERSE_SAWTOOTH") return WaveType::kInverseSawtooth;
+  return WaveType::kSine;  // "SIN"
+}
+
+CullMode ParseCullMode(const std::string& name) {
+  if (name == "BACK") return CullMode::kBack;
+  if (name == "NONE") return CullMode::kNone;
+  return CullMode::kFront;
+}
+
+RgbGen ParseRgbGen(const tinygltf::Value& obj) {
+  RgbGen gen;
+  if (!obj.IsObject() || !obj.Has("type")) return gen;
+  const std::string type = obj.Get("type").Get<std::string>();
+  if (type == "IDENTITY_LIGHTING") {
+    gen.type = RgbGenType::kIdentityLighting;
+  } else if (type == "VERTEX") {
+    gen.type = RgbGenType::kVertex;
+  } else if (type == "EXACT_VERTEX") {
+    gen.type = RgbGenType::kExactVertex;
+  } else if (type == "WAVE") {
+    gen.type = RgbGenType::kWave;
+    gen.wave = obj.Has("func") ? ParseWaveType(obj.Get("func").Get<std::string>())
+                               : WaveType::kSine;
+    auto num = [&](const char* k) -> float {
+      return obj.Has(k) ? float(obj.Get(k).GetNumberAsDouble()) : 0.0f;
+    };
+    gen.base = num("base");
+    gen.amplitude = num("amplitude");
+    gen.phase = num("phase");
+    gen.frequency = num("frequency");
+  } else {
+    gen.type = RgbGenType::kIdentity;
+  }
+  return gen;
+}
+
+std::vector<TcMod> ParseTcMods(const tinygltf::Value& arr) {
+  std::vector<TcMod> mods;
+  if (!arr.IsArray()) return mods;
+  for (size_t i = 0; i < arr.ArrayLen(); ++i) {
+    const auto& m = arr.Get(static_cast<int>(i));
+    if (!m.Has("type")) continue;
+    const std::string type = m.Get("type").Get<std::string>();
+    TcMod mod;
+    if (type == "SCALE") {
+      mod.type = TcModType::kScale;
+    } else if (type == "SCROLL") {
+      mod.type = TcModType::kScroll;
+    } else if (type == "ROTATE") {
+      mod.type = TcModType::kRotate;
+    } else if (type == "TURB") {
+      mod.type = TcModType::kTurb;
+    } else if (type == "STRETCH") {
+      mod.type = TcModType::kStretch;
+    } else if (type == "TRANSFORM") {
+      mod.type = TcModType::kTransform;
+    } else {
+      continue;
+    }
+    if (m.Has("value")) {
+      const auto& v = m.Get("value");
+      if (v.IsArray()) {
+        // TURB/STRETCH lead with a wave-type string; the rest are numeric.
+        for (size_t k = 0; k < v.ArrayLen(); ++k) {
+          const auto& e = v.Get(static_cast<int>(k));
+          if (e.IsString()) {
+            mod.wave = ParseWaveType(e.Get<std::string>());
+          } else {
+            mod.values.push_back(float(e.GetNumberAsDouble()));
+          }
+        }
+      } else if (v.IsNumber()) {
+        mod.values.push_back(float(v.GetNumberAsDouble()));  // ROTATE scalar
+      }
+    }
+    mods.push_back(std::move(mod));
+  }
+  return mods;
+}
+
 void ProcessMaterials(const tinygltf::Model& model,
                       const std::filesystem::path& base_path,
                       std::vector<Material>* result) {
@@ -484,6 +587,15 @@ void ProcessMaterials(const tinygltf::Model& model,
       mat.metallic_roughness_texture.pixel_data = {
           0, static_cast<uint8_t>(roughness * 255),
           static_cast<uint8_t>(metallic * 255)};
+    }
+
+    // Quake 3 layer stack (SH_material_layers), retained for the GLSL compositor.
+    ParseMaterialLayers(model, gltf_mat, base_path, &mat);
+    if (!mat.layers.empty() &&
+        mat.layers[mat.base_layer].texture.channels == 4) {
+      // Coverage comes from the base layer's Q3 alpha, so it is a cut-out even if
+      // the (opaque) modern albedo dropped its alpha channel.
+      mat.alpha_cutout = true;
     }
 
     result->push_back(std::move(mat));
@@ -661,6 +773,60 @@ bool TraverseNodes(const tinygltf::Model& model, int node_index,
 }
 
 }  // namespace
+
+void ParseMaterialLayers(const tinygltf::Model& model,
+                         const tinygltf::Material& gltf_mat,
+                         const std::filesystem::path& base_path, Material* mat) {
+  auto it = gltf_mat.extensions.find("SH_material_layers");
+  if (it == gltf_mat.extensions.end()) return;
+  const tinygltf::Value& ext = it->second;
+  if (!ext.Has("layers") || !ext.Get("layers").IsArray()) return;
+
+  mat->base_layer =
+      ext.Has("baseLayer") ? ext.Get("baseLayer").GetNumberAsInt() : 0;
+  mat->cull_mode = ext.Has("cullMode")
+                       ? ParseCullMode(ext.Get("cullMode").Get<std::string>())
+                       : CullMode::kFront;
+
+  const tinygltf::Value& larr = ext.Get("layers");
+  mat->layers.reserve(larr.ArrayLen());
+  for (size_t i = 0; i < larr.ArrayLen(); ++i) {
+    const auto& lo = larr.Get(static_cast<int>(i));
+    Layer layer;
+    if (lo.Has("texture") && lo.Get("texture").Has("index")) {
+      LoadTexture(model, lo.Get("texture").Get("index").GetNumberAsInt(),
+                  base_path, &layer.texture, true);
+    }
+    if (lo.Has("animFrames") && lo.Get("animFrames").IsArray()) {
+      const auto& frames = lo.Get("animFrames");
+      layer.anim_frames.reserve(frames.ArrayLen());
+      for (size_t f = 0; f < frames.ArrayLen(); ++f) {
+        Texture frame;
+        LoadTexture(model, frames.Get(static_cast<int>(f)).GetNumberAsInt(),
+                    base_path, &frame, true);
+        layer.anim_frames.push_back(std::move(frame));
+      }
+      if (lo.Has("animFreq")) {
+        layer.anim_freq = float(lo.Get("animFreq").GetNumberAsDouble());
+      }
+    }
+    if (lo.Has("blendSrc")) {
+      layer.blend_src = ParseBlendFactor(lo.Get("blendSrc").Get<std::string>());
+    }
+    if (lo.Has("blendDst")) {
+      layer.blend_dst = ParseBlendFactor(lo.Get("blendDst").Get<std::string>());
+    }
+    if (lo.Has("rgbGen")) layer.rgbgen = ParseRgbGen(lo.Get("rgbGen"));
+    if (lo.Has("tcMod")) layer.tcmods = ParseTcMods(lo.Get("tcMod"));
+    mat->layers.push_back(std::move(layer));
+  }
+
+  if (mat->base_layer < 0 ||
+      mat->base_layer >= static_cast<int>(mat->layers.size())) {
+    mat->base_layer = 0;
+  }
+  if (!mat->layers.empty()) mat->layers[mat->base_layer].is_base = true;
+}
 
 std::optional<Scene> LoadScene(const std::filesystem::path& gltf_file) {
   tinygltf::Model model;

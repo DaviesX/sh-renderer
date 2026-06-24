@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "culling.h"
+#include "q3_layer.h"
 #include "ssbo.h"
 
 namespace sh_renderer {
@@ -56,6 +57,23 @@ struct Texture32I {
   uint32_t texture_id = 0;
 };
 
+// --- Layer ---
+// One Quake 3 shader stage from `SH_material_layers`. The base layer's colour is
+// the modern `baseColorTexture` (the artist-modernised albedo) substituted at
+// composite time; its own `texture` is kept for coverage (alpha).
+struct Layer {
+  Texture texture;
+  // animMap frames (frame 0 == `texture`); empty for a static `map` stage.
+  std::vector<Texture> anim_frames;
+  float anim_freq = 0.f;  // frames per second
+
+  BlendFactor blend_src = BlendFactor::kOne;
+  BlendFactor blend_dst = BlendFactor::kZero;
+  RgbGen rgbgen;
+  std::vector<TcMod> tcmods;
+  bool is_base = false;
+};
+
 // --- Material ---
 struct Material {
   std::string name;
@@ -72,6 +90,11 @@ struct Material {
 
   // Alpha Cutout.
   bool alpha_cutout = false;
+
+  // Quake 3 shader stack from SH_material_layers (empty for plain PBR materials).
+  std::vector<Layer> layers;
+  int base_layer = 0;
+  CullMode cull_mode = CullMode::kFront;
 };
 
 // --- Geometry ---
