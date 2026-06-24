@@ -393,12 +393,18 @@ WaveType ParseWaveType(const std::string& name) {
   if (name == "SQUARE") return WaveType::kSquare;
   if (name == "SAWTOOTH") return WaveType::kSawtooth;
   if (name == "INVERSE_SAWTOOTH") return WaveType::kInverseSawtooth;
-  return WaveType::kSine;  // "SIN"
+  if (name != "SIN") {
+    LOG(WARNING) << "Unknown wave type '" << name << "', defaulting to SIN";
+  }
+  return WaveType::kSine;
 }
 
 CullMode ParseCullMode(const std::string& name) {
   if (name == "BACK") return CullMode::kBack;
   if (name == "NONE") return CullMode::kNone;
+  if (name != "FRONT") {
+    LOG(WARNING) << "Unknown cull mode '" << name << "', defaulting to FRONT";
+  }
   return CullMode::kFront;
 }
 
@@ -424,9 +430,43 @@ RgbGen ParseRgbGen(const tinygltf::Value& obj) {
     gen.phase = num("phase");
     gen.frequency = num("frequency");
   } else {
+    if (type != "IDENTITY") {
+      LOG(WARNING) << "Unknown rgbGen type '" << type
+                   << "', defaulting to IDENTITY";
+    }
     gen.type = RgbGenType::kIdentity;
   }
   return gen;
+}
+
+// Pads/truncates a tcMod's numeric params to the count its type needs, with
+// identity defaults, so downstream (SSBO packing / GLSL) never reads OOB on a
+// malformed stage.
+void NormalizeTcModValues(TcMod* mod) {
+  switch (mod->type) {
+    case TcModType::kScale:
+      mod->values.resize(2, 1.0f);  // identity scale; pads/truncates to [s, t]
+      break;
+    case TcModType::kScroll:
+      mod->values.resize(2, 0.0f);
+      break;
+    case TcModType::kRotate:
+      mod->values.resize(1, 0.0f);
+      break;
+    case TcModType::kTurb:
+    case TcModType::kStretch:
+      mod->values.resize(4, 0.0f);  // base, amp, phase, freq
+      break;
+    case TcModType::kTransform: {
+      static const float kIdentity[6] = {1, 0, 0, 0, 1, 0};
+      size_t had = mod->values.size();
+      mod->values.resize(6);
+      for (size_t i = had; i < 6; ++i) mod->values[i] = kIdentity[i];
+      break;
+    }
+    case TcModType::kNoOp:
+      break;
+  }
 }
 
 std::vector<TcMod> ParseTcMods(const tinygltf::Value& arr) {
@@ -468,6 +508,7 @@ std::vector<TcMod> ParseTcMods(const tinygltf::Value& arr) {
         mod.values.push_back(float(v.GetNumberAsDouble()));  // ROTATE scalar
       }
     }
+    NormalizeTcModValues(&mod);
     mods.push_back(std::move(mod));
   }
   return mods;
@@ -591,11 +632,14 @@ void ProcessMaterials(const tinygltf::Model& model,
 
     // Quake 3 layer stack (SH_material_layers), retained for the GLSL compositor.
     ParseMaterialLayers(model, gltf_mat, base_path, &mat);
-    if (!mat.layers.empty() &&
-        mat.layers[mat.base_layer].texture.channels == 4) {
-      // Coverage comes from the base layer's Q3 alpha, so it is a cut-out even if
-      // the (opaque) modern albedo dropped its alpha channel.
-      mat.alpha_cutout = true;
+    if (!mat.layers.empty()) {
+      // Coverage matches the baker: the modern albedo's alpha when it has one,
+      // otherwise the base layer's Q3 alpha. LoadTexture only keeps a 4th channel
+      // when the image actually has transparency, so channels == 4 means "has
+      // coverage". Recompute (don't just OR-in) so an opaque base layer correctly
+      // clears the flag that the modern-albedo check above may have set.
+      mat.alpha_cutout = mat.albedo.channels == 4 ||
+                         mat.layers[mat.base_layer].texture.channels == 4;
     }
 
     result->push_back(std::move(mat));

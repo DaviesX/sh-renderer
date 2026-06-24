@@ -89,29 +89,29 @@ TEST(LoaderLayers, ParsesStack) {
 
   ASSERT_EQ(mat.layers.size(), 2u);
   EXPECT_EQ(mat.base_layer, 1);
-  EXPECT_TRUE(mat.cull_mode == CullMode::kNone);
+  EXPECT_EQ(mat.cull_mode, CullMode::kNone);
   EXPECT_FALSE(mat.layers[0].is_base);
   EXPECT_TRUE(mat.layers[1].is_base);
 
   const Layer& a = mat.layers[0];
-  EXPECT_TRUE(a.blend_src == BlendFactor::kOne);
-  EXPECT_TRUE(a.blend_dst == BlendFactor::kZero);
+  EXPECT_EQ(a.blend_src, BlendFactor::kOne);
+  EXPECT_EQ(a.blend_dst, BlendFactor::kZero);
   EXPECT_EQ(a.texture.channels, 4u);  // base alpha preserved (has a transparent texel)
   ASSERT_EQ(a.tcmods.size(), 2u);
-  EXPECT_TRUE(a.tcmods[0].type == TcModType::kScale);
+  EXPECT_EQ(a.tcmods[0].type, TcModType::kScale);
   ASSERT_EQ(a.tcmods[0].values.size(), 2u);
   EXPECT_FLOAT_EQ(a.tcmods[0].values[0], 4.0f);
   EXPECT_FLOAT_EQ(a.tcmods[0].values[1], 2.0f);
-  EXPECT_TRUE(a.tcmods[1].type == TcModType::kScroll);
+  EXPECT_EQ(a.tcmods[1].type, TcModType::kScroll);
   EXPECT_FLOAT_EQ(a.tcmods[1].values[0], 0.5f);
   EXPECT_FLOAT_EQ(a.anim_freq, 10.0f);
   ASSERT_EQ(a.anim_frames.size(), 2u);
 
   const Layer& b = mat.layers[1];
-  EXPECT_TRUE(b.blend_src == BlendFactor::kSrcAlpha);
-  EXPECT_TRUE(b.blend_dst == BlendFactor::kOneMinusSrcAlpha);
-  EXPECT_TRUE(b.rgbgen.type == RgbGenType::kWave);
-  EXPECT_TRUE(b.rgbgen.wave == WaveType::kSawtooth);
+  EXPECT_EQ(b.blend_src, BlendFactor::kSrcAlpha);
+  EXPECT_EQ(b.blend_dst, BlendFactor::kOneMinusSrcAlpha);
+  EXPECT_EQ(b.rgbgen.type, RgbGenType::kWave);
+  EXPECT_EQ(b.rgbgen.wave, WaveType::kSawtooth);
   EXPECT_FLOAT_EQ(b.rgbgen.phase, 0.25f);
   EXPECT_FLOAT_EQ(b.rgbgen.frequency, 2.0f);
 }
@@ -122,6 +122,29 @@ TEST(LoaderLayers, NoExtensionLeavesLayersEmpty) {
   Material mat;
   ParseMaterialLayers(model, gmat, ".", &mat);
   EXPECT_TRUE(mat.layers.empty());
+}
+
+TEST(LoaderLayers, NormalizesShortTcModValues) {
+  tinygltf::Model model;
+  int t0 = AddTexture(&model, 3);
+  tinygltf::Value::Object lo = MakeLayer(t0, "ONE", "ZERO");
+  tinygltf::Value::Object scale;
+  scale["type"] = Str("SCALE");
+  scale["value"] =
+      tinygltf::Value(tinygltf::Value::Array{tinygltf::Value(4.0)});  // only 1
+  lo["tcMod"] = tinygltf::Value(tinygltf::Value::Array{tinygltf::Value(scale)});
+  tinygltf::Value::Object ext;
+  ext["layers"] = tinygltf::Value(tinygltf::Value::Array{tinygltf::Value(lo)});
+  tinygltf::Material gmat;
+  gmat.extensions["SH_material_layers"] = tinygltf::Value(ext);
+
+  Material mat;
+  ParseMaterialLayers(model, gmat, ".", &mat);
+  ASSERT_EQ(mat.layers.size(), 1u);
+  ASSERT_EQ(mat.layers[0].tcmods.size(), 1u);
+  ASSERT_EQ(mat.layers[0].tcmods[0].values.size(), 2u);  // padded to [s, t]
+  EXPECT_FLOAT_EQ(mat.layers[0].tcmods[0].values[0], 4.0f);
+  EXPECT_FLOAT_EQ(mat.layers[0].tcmods[0].values[1], 1.0f);  // identity scale
 }
 
 TEST(LoaderLayers, OutOfRangeBaseLayerClampsToZero) {
