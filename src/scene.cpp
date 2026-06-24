@@ -440,13 +440,17 @@ std::vector<Geometry> PartitionLooseGeometry(const Geometry& geometry) {
   return result;
 }
 
-// Uploads a flat descriptor array as an SSBO with a 16-byte count header (so the
-// shader can read `uint count; T items[];`). Always creates a valid buffer, even
-// when empty (header only).
+// Uploads a flat descriptor array as an SSBO laid out for `uint count; T
+// items[];`. The array begins at the std430 offset for `T` after the count: the
+// next multiple of alignof(T) (4 for our all-scalar structs, so the shader uses
+// no padding before `items`). Always creates a valid buffer, even when empty.
 template <typename T>
 void UploadDescriptorSSBO(const std::vector<T>& items, SSBO* ssbo) {
+  DCHECK(ssbo != nullptr);
   uint32_t count = static_cast<uint32_t>(items.size());
-  const size_t header = 16;  // std430: uint count + padding
+  // std430: the array starts at the next multiple of its element alignment.
+  const size_t alignment = alignof(T);
+  const size_t header = (sizeof(uint32_t) + alignment - 1) & ~(alignment - 1);
   size_t data_size = header + count * sizeof(T);
   std::vector<uint8_t> buffer(data_size, 0);
   std::memcpy(buffer.data(), &count, sizeof(uint32_t));
@@ -463,6 +467,9 @@ void BuildLayerBuffers(const std::vector<Material>& materials,
                        std::vector<GpuMaterial>* out_materials,
                        std::vector<GpuMaterialLayer>* out_layers,
                        std::vector<GpuTcMod>* out_tcmods) {
+  DCHECK(out_materials != nullptr);
+  DCHECK(out_layers != nullptr);
+  DCHECK(out_tcmods != nullptr);
   out_materials->clear();
   out_layers->clear();
   out_tcmods->clear();
