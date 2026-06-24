@@ -143,6 +143,7 @@ add_executable(sh_renderer_test
     src/culling_test.cpp
     src/input_test.cpp
     src/interaction_test.cpp
+    src/loader_layers_test.cpp
     src/scene_test.cpp
     src/window_test.cpp
 )
