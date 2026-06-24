@@ -9,6 +9,9 @@
 namespace sh_renderer {
 namespace {
 
+constexpr int kMaxIncludeDepth = 16;
+constexpr std::string_view kIncludeDirective = "#include";
+
 std::string ReadFile(const std::filesystem::path& path) {
   std::ifstream f(path);
   if (!f.is_open()) {
@@ -61,7 +64,57 @@ GLuint CompileShader(GLenum type, const std::string& source,
   return shader;
 }
 
+std::string ExpandIncludes(std::string_view source,
+                           const std::filesystem::path& base_dir, int depth) {
+  if (depth > kMaxIncludeDepth) {
+    LOG(ERROR) << "Shader #include nesting too deep (under " << base_dir << ")";
+    return std::string(source);
+  }
+
+  // Scan line by line, inlining the content of each #include directive.
+  std::istringstream in{std::string(source)};
+  std::ostringstream out;
+  std::string line;
+  while (std::getline(in, line)) {
+    size_t line_start = line.find_first_not_of(" \t");
+    if (line_start == std::string::npos ||
+        line.compare(line_start, kIncludeDirective.size(), kIncludeDirective) !=
+            0) {
+      // This line is not an #include directive, so write it as is.
+      out << line << "\n";
+      continue;
+    }
+
+    // An #include directive: parse the quoted path and inline that file.
+    size_t file_name_start =
+        line.find('"', line_start + kIncludeDirective.size());
+    size_t file_name_end = (file_name_start == std::string::npos)
+                               ? std::string::npos
+                               : line.find('"', file_name_start + 1);
+    if (file_name_start == std::string::npos ||
+        file_name_end == std::string::npos ||
+        file_name_end <= file_name_start) {
+      LOG(ERROR) << "Malformed shader #include: " << line;
+      out << line << "\n";
+      continue;
+    }
+
+    std::string include_file_path =
+        line.substr(file_name_start + 1, file_name_end - file_name_start - 1);
+    std::filesystem::path inc_path = base_dir / include_file_path;
+    std::string inc_src = ReadFile(inc_path);
+    out << ExpandIncludes(inc_src, inc_path.parent_path(), depth + 1) << "\n";
+  }
+
+  return out.str();
+}
+
 }  // namespace
+
+std::string ResolveShaderIncludes(std::string_view source,
+                                  const std::filesystem::path& base_dir) {
+  return ExpandIncludes(source, base_dir, 0);
+}
 
 ShaderProgram::ShaderProgram(ShaderProgram&& other) noexcept : id_(other.id_) {
   other.id_ = 0;
@@ -85,6 +138,7 @@ std::optional<ShaderProgram> ShaderProgram::CreateCompute(
     const std::map<std::string, std::string>& macros) {
   std::string compute_src = ReadFile(compute_path);
   if (compute_src.empty()) return std::nullopt;
+  compute_src = ResolveShaderIncludes(compute_src, compute_path.parent_path());
 
   GLuint compute_shader = CompileShader(GL_COMPUTE_SHADER, compute_src,
                                         compute_path.string(), macros);
@@ -116,9 +170,12 @@ std::optional<ShaderProgram> ShaderProgram::CreateGraphics(
     const std::map<std::string, std::string>& macros) {
   std::string vertex_src = ReadFile(vertex_path);
   if (vertex_src.empty()) return std::nullopt;
+  vertex_src = ResolveShaderIncludes(vertex_src, vertex_path.parent_path());
 
   std::string fragment_src = ReadFile(fragment_path);
   if (fragment_src.empty()) return std::nullopt;
+  fragment_src =
+      ResolveShaderIncludes(fragment_src, fragment_path.parent_path());
 
   return CreateFromSource(vertex_src, fragment_src, macros);
 }
