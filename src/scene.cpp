@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <numeric>
 #include <unordered_map>
 
@@ -439,7 +440,65 @@ std::vector<Geometry> PartitionLooseGeometry(const Geometry& geometry) {
   return result;
 }
 
+// Uploads a flat descriptor array as an SSBO with a 16-byte count header (so the
+// shader can read `uint count; T items[];`). Always creates a valid buffer, even
+// when empty (header only).
+template <typename T>
+void UploadDescriptorSSBO(const std::vector<T>& items, SSBO* ssbo) {
+  uint32_t count = static_cast<uint32_t>(items.size());
+  const size_t header = 16;  // std430: uint count + padding
+  size_t data_size = header + count * sizeof(T);
+  std::vector<uint8_t> buffer(data_size, 0);
+  std::memcpy(buffer.data(), &count, sizeof(uint32_t));
+  if (count > 0) {
+    std::memcpy(buffer.data() + header, items.data(), count * sizeof(T));
+  }
+  if (ssbo->id != 0) DestroySSBO(*ssbo);
+  *ssbo = CreateSSBO(buffer.data(), data_size);
+}
+
 }  // namespace
+
+void BuildLayerBuffers(const std::vector<Material>& materials,
+                       std::vector<GpuMaterial>* out_materials,
+                       std::vector<GpuMaterialLayer>* out_layers,
+                       std::vector<GpuTcMod>* out_tcmods) {
+  out_materials->clear();
+  out_layers->clear();
+  out_tcmods->clear();
+  out_materials->reserve(materials.size());
+  for (const auto& mat : materials) {
+    GpuMaterial gm{};
+    gm.layer_offset = static_cast<int32_t>(out_layers->size());
+    gm.layer_count = static_cast<int32_t>(mat.layers.size());
+    gm.base_layer = mat.base_layer;
+    out_materials->push_back(gm);
+
+    for (const auto& layer : mat.layers) {
+      GpuMaterialLayer gl{};
+      gl.blend_src = static_cast<int32_t>(layer.blend_src);
+      gl.blend_dst = static_cast<int32_t>(layer.blend_dst);
+      gl.rgbgen_type = static_cast<int32_t>(layer.rgbgen.type);
+      gl.rgbgen_wave = static_cast<int32_t>(layer.rgbgen.wave);
+      gl.rgbgen_base = layer.rgbgen.base;
+      gl.rgbgen_amplitude = layer.rgbgen.amplitude;
+      gl.rgbgen_phase = layer.rgbgen.phase;
+      gl.rgbgen_frequency = layer.rgbgen.frequency;
+      gl.tcmod_offset = static_cast<int32_t>(out_tcmods->size());
+      gl.tcmod_count = static_cast<int32_t>(layer.tcmods.size());
+      for (const auto& tc : layer.tcmods) {
+        GpuTcMod g{};
+        g.type = static_cast<int32_t>(tc.type);
+        g.wave = static_cast<int32_t>(tc.wave);
+        for (size_t k = 0; k < tc.values.size() && k < 6; ++k) {
+          g.v[k] = tc.values[k];
+        }
+        out_tcmods->push_back(g);
+      }
+      out_layers->push_back(gl);
+    }
+  }
+}
 
 void UploadSceneToGPU(Scene& scene) {
   // Upload Materials (Textures)
@@ -467,6 +526,23 @@ void UploadSceneToGPU(Scene& scene) {
       mat.emissive_texture->texture_id =
           CreateTexture2D(*mat.emissive_texture, true);
     }
+
+    // SH_material_layers: upload each layer's texture, or all animMap frames
+    // (sRGB). A static layer uses `texture`; an animated one uses `anim_frames`
+    // (the draw selects the active frame on the CPU).
+    for (auto& layer : mat.layers) {
+      if (layer.anim_frames.empty()) {
+        if (layer.texture.texture_id == 0 && !layer.texture.pixel_data.empty()) {
+          layer.texture.texture_id = CreateTexture2D(layer.texture, true);
+        }
+      } else {
+        for (auto& frame : layer.anim_frames) {
+          if (frame.texture_id == 0 && !frame.pixel_data.empty()) {
+            frame.texture_id = CreateTexture2D(frame, true);
+          }
+        }
+      }
+    }
   }
 
   // Upload Lightmaps
@@ -481,6 +557,18 @@ void UploadSceneToGPU(Scene& scene) {
   // Upload Geometry
   for (auto& geo : scene.geometries) {
     UploadGeometry(geo);
+  }
+
+  // SH_material_layers descriptors.
+  {
+    std::vector<GpuMaterial> gpu_materials;
+    std::vector<GpuMaterialLayer> gpu_layers;
+    std::vector<GpuTcMod> gpu_tcmods;
+    BuildLayerBuffers(scene.materials, &gpu_materials, &gpu_layers,
+                      &gpu_tcmods);
+    UploadDescriptorSSBO(gpu_materials, &scene.material_range_ssbo);
+    UploadDescriptorSSBO(gpu_layers, &scene.material_layer_ssbo);
+    UploadDescriptorSSBO(gpu_tcmods, &scene.material_tcmod_ssbo);
   }
 }
 
