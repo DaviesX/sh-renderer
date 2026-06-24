@@ -115,4 +115,58 @@ TEST(SceneTest, PartitionLooseGeometries_HandlesNoIndices) {
   EXPECT_EQ(scene.geometries.size(), 2);
 }
 
+TEST(SceneTest, BuildLayerBuffersPacksStack) {
+  std::vector<Material> materials(2);
+
+  // Material 0: plain PBR (no layers).
+  materials[0].name = "plain";
+
+  // Material 1: two layers; layer 0 has two tcMods, layer 1 a wave rgbGen.
+  materials[1].name = "layered";
+  materials[1].base_layer = 1;
+  Layer l0;
+  l0.blend_src = BlendFactor::kOne;
+  l0.blend_dst = BlendFactor::kZero;
+  l0.tcmods.push_back(TcMod{TcModType::kScale, {4.0f, 2.0f}, WaveType::kSine});
+  l0.tcmods.push_back(TcMod{TcModType::kScroll, {0.5f, 0.0f}, WaveType::kSine});
+  Layer l1;
+  l1.blend_src = BlendFactor::kSrcAlpha;
+  l1.blend_dst = BlendFactor::kOneMinusSrcAlpha;
+  l1.is_base = true;
+  l1.rgbgen.type = RgbGenType::kWave;
+  l1.rgbgen.wave = WaveType::kSawtooth;
+  l1.rgbgen.phase = 0.25f;
+  l1.rgbgen.frequency = 2.0f;
+  materials[1].layers = {l0, l1};
+
+  std::vector<GpuMaterial> gpu_materials;
+  std::vector<GpuMaterialLayer> gpu_layers;
+  std::vector<GpuTcMod> gpu_tcmods;
+  BuildLayerBuffers(materials, &gpu_materials, &gpu_layers, &gpu_tcmods);
+
+  // One GpuMaterial per material; offsets are flat across materials.
+  ASSERT_EQ(gpu_materials.size(), 2u);
+  EXPECT_EQ(gpu_materials[0].layer_count, 0);
+  EXPECT_EQ(gpu_materials[1].layer_count, 2);
+  EXPECT_EQ(gpu_materials[1].layer_offset, 0);  // material 0 contributed none
+  EXPECT_EQ(gpu_materials[1].base_layer, 1);
+
+  ASSERT_EQ(gpu_layers.size(), 2u);
+  EXPECT_EQ(gpu_layers[0].blend_src, static_cast<int>(BlendFactor::kOne));
+  EXPECT_EQ(gpu_layers[0].tcmod_offset, 0);
+  EXPECT_EQ(gpu_layers[0].tcmod_count, 2);
+  EXPECT_EQ(gpu_layers[1].tcmod_offset, 2);  // after layer 0's two tcMods
+  EXPECT_EQ(gpu_layers[1].tcmod_count, 0);
+  EXPECT_EQ(gpu_layers[1].rgbgen_type, static_cast<int>(RgbGenType::kWave));
+  EXPECT_EQ(gpu_layers[1].rgbgen_wave, static_cast<int>(WaveType::kSawtooth));
+  EXPECT_FLOAT_EQ(gpu_layers[1].rgbgen_phase, 0.25f);
+
+  ASSERT_EQ(gpu_tcmods.size(), 2u);
+  EXPECT_EQ(gpu_tcmods[0].type, static_cast<int>(TcModType::kScale));
+  EXPECT_FLOAT_EQ(gpu_tcmods[0].v[0], 4.0f);
+  EXPECT_FLOAT_EQ(gpu_tcmods[0].v[1], 2.0f);
+  EXPECT_EQ(gpu_tcmods[1].type, static_cast<int>(TcModType::kScroll));
+  EXPECT_FLOAT_EQ(gpu_tcmods[1].v[0], 0.5f);
+}
+
 }  // namespace sh_renderer

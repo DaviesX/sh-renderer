@@ -192,8 +192,56 @@ struct Scene {
   // GL Resources
   SSBO point_light_list_ssbo;
   SSBO spot_light_list_ssbo;
+  // SH_material_layers descriptors (see GpuMaterial/GpuMaterialLayer/GpuTcMod).
+  SSBO material_range_ssbo;   // one GpuMaterial per scene material
+  SSBO material_layer_ssbo;   // flat GpuMaterialLayer array
+  SSBO material_tcmod_ssbo;   // flat GpuTcMod array
   ShadowAtlasContext shadow_atlas;
 };
+
+// GPU-side SH_material_layers descriptors (std430, tightly packed, all 4-byte
+// scalars padded to 16-byte multiples). Layer textures are NOT referenced here:
+// the draw binds each material's layers to a capped sampler array in order and
+// the CPU selects the active animMap frame. The base layer's colour comes from
+// the modern baseColorTexture instead of its sampler (shader checks base_layer).
+struct GpuMaterial {
+  int32_t layer_offset;  // first layer in the flat layer array
+  int32_t layer_count;   // 0 for plain PBR materials
+  int32_t base_layer;    // index within [layer_offset, layer_offset+layer_count)
+  int32_t _pad0;
+};
+static_assert(sizeof(GpuMaterial) == 16);
+
+struct GpuMaterialLayer {
+  int32_t blend_src;  // BlendFactor
+  int32_t blend_dst;  // BlendFactor
+  int32_t rgbgen_type;
+  int32_t rgbgen_wave;
+  float rgbgen_base;
+  float rgbgen_amplitude;
+  float rgbgen_phase;
+  float rgbgen_frequency;
+  int32_t tcmod_offset;  // first tcMod in the flat tcMod array
+  int32_t tcmod_count;
+  int32_t _pad0;
+  int32_t _pad1;
+};
+static_assert(sizeof(GpuMaterialLayer) == 48);
+
+struct GpuTcMod {
+  int32_t type;  // TcModType
+  int32_t wave;  // WaveType (TURB/STRETCH)
+  float v[6];    // SCALE [s,t]; TRANSFORM [m00..m12]; TURB/STRETCH [base,amp,phase,freq]
+};
+static_assert(sizeof(GpuTcMod) == 32);
+
+// Packs the materials' layer stacks into flat GpuMaterial/GpuMaterialLayer/
+// GpuTcMod arrays (pure CPU; no GL). Every material yields one GpuMaterial (with
+// layer_count 0 for plain PBR). Exposed for testing.
+void BuildLayerBuffers(const std::vector<Material>& materials,
+                       std::vector<GpuMaterial>* out_materials,
+                       std::vector<GpuMaterialLayer>* out_layers,
+                       std::vector<GpuTcMod>* out_tcmods);
 
 // GPU-side light structs (std430 layout).
 // These are tightly packed for SSBO upload.
