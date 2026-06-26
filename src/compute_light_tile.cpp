@@ -94,8 +94,9 @@ void ComputeTileLightList(const Camera& camera, const RenderTarget& hdr_target,
   // Bind depth texture.
   glBindTextureUnit(15, hdr_target.depth_buffer);
 
-  // Bind debug heatmap as image.
-  glBindImageTexture(14, tile_light_list->debug_heatmap_texture, 0, GL_FALSE, 0,
+  // Bind debug heatmap as image unit 0 (must match the binding in
+  // light_cull.comp).
+  glBindImageTexture(0, tile_light_list->debug_heatmap_texture, 0, GL_FALSE, 0,
                      GL_WRITE_ONLY, GL_RGBA8);
 
   // Set uniforms.

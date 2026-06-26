@@ -145,6 +145,7 @@ add_executable(sh_renderer_test
     src/interaction_test.cpp
     src/loader_layers_test.cpp
     src/scene_test.cpp
+    src/shader_test.cpp
     src/window_test.cpp
 )
 

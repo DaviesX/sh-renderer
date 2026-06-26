@@ -57,7 +57,7 @@ uniform ivec2 u_screen_size;
 layout(binding = 15) uniform sampler2D u_depth_texture;
 
 // Debug heatmap output.
-layout(rgba8, binding = 14) uniform writeonly image2D u_debug_heatmap;
+layout(rgba8, binding = 0) uniform writeonly image2D u_debug_heatmap;
 
 // --- Constants ---
 const uint TILE_SIZE = 16;

@@ -66,4 +66,11 @@ class ShaderProgram {
   GLuint id_ = 0;
 };
 
+// Resolves `#include "file"` directives in GLSL source by inlining the file's
+// contents (paths are resolved relative to `base_dir`, then to the included
+// file's own directory for nested includes). GLSL has no native include, so this
+// is plain textual substitution, applied before compilation. Exposed for testing.
+std::string ResolveShaderIncludes(std::string_view source,
+                                  const std::filesystem::path& base_dir);
+
 }  // namespace sh_renderer
