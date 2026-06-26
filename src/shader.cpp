@@ -113,7 +113,7 @@ std::string ExpandIncludes(std::string_view source,
 
 std::string ResolveShaderIncludes(std::string_view source,
                                   const std::filesystem::path& base_dir) {
-  return ExpandIncludes(source, base_dir, 0);
+  return ExpandIncludes(source, base_dir, /*depth=*/0);
 }
 
 ShaderProgram::ShaderProgram(ShaderProgram&& other) noexcept : id_(other.id_) {
