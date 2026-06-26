@@ -204,11 +204,15 @@ struct Scene {
 // the draw binds each material's layers to a capped sampler array in order and
 // the CPU selects the active animMap frame. The base layer's colour comes from
 // the modern baseColorTexture instead of its sampler (shader checks base_layer).
+// Max layer samplers bound per draw (the shader's `u_layers` array size). Q3
+// materials rarely exceed this; extra stages are dropped.
+constexpr int kMaxLayers = 8;
+
 struct GpuMaterial {
-  int32_t layer_offset;  // first layer in the flat layer array
-  int32_t layer_count;   // 0 for plain PBR materials
-  int32_t base_layer;    // index within [layer_offset, layer_offset+layer_count)
-  int32_t _pad0;
+  int32_t layer_offset;      // first layer in the flat layer array
+  int32_t layer_count;       // 0 for plain PBR materials
+  int32_t base_layer;        // index within [0, layer_count)
+  int32_t modern_has_alpha;  // 1 if the base coverage comes from the modern albedo
 };
 static_assert(sizeof(GpuMaterial) == 16);
 

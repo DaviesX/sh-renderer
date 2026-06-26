@@ -479,6 +479,9 @@ void BuildLayerBuffers(const std::vector<Material>& materials,
     gm.layer_offset = static_cast<int32_t>(out_layers->size());
     gm.layer_count = static_cast<int32_t>(mat.layers.size());
     gm.base_layer = mat.base_layer;
+    // Coverage matches the baker: the modern albedo's alpha when it has one
+    // (4-channel), else the base layer's Q3 alpha.
+    gm.modern_has_alpha = mat.albedo.channels == 4 ? 1 : 0;
     out_materials->push_back(gm);
 
     for (const auto& layer : mat.layers) {

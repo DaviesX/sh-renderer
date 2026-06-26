@@ -29,6 +29,6 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
                        const TileLightListList& tile_light_list,
                        const RenderTarget& ssao_target,
                        const ShaderProgram& program,
-                       const RenderTarget& hdr_target);
+                       const RenderTarget& hdr_target, float time);
 
 }  // namespace sh_renderer
