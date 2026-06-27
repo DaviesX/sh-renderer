@@ -2,10 +2,13 @@
 
 #include <glog/logging.h>
 
+#include <string>
+
 #include "camera.h"
 #include "cascade.h"
 #include "culling.h"
 #include "glad.h"
+#include "q3_layer_bind.h"
 #include "render_target.h"
 #include "scene.h"
 #include "shader.h"
@@ -24,7 +27,8 @@ ShaderProgram CreateShadowMapOpaqueProgram() {
 
 ShaderProgram CreateShadowMapCutoutProgram() {
   auto program = ShaderProgram::CreateGraphics(
-      "glsl/depth.vert", "glsl/depth.frag", {{"CUTOUT", "1"}});
+      "glsl/depth.vert", "glsl/depth.frag",
+      {{"CUTOUT", "1"}, {"MAX_LAYERS", std::to_string(kMaxLayers)}});
   if (!program) {
     LOG(ERROR) << "Failed to create cutout shadow map program.";
     return {};
@@ -121,7 +125,7 @@ void DrawCascadedShadowMap(
     const Scene& scene, const Camera& camera,
     const ShaderProgram& opaque_program, const ShaderProgram& cutout_program,
     const std::vector<Cascade>& cascades,
-    const std::vector<RenderTarget>& shadow_map_targets) {
+    const std::vector<RenderTarget>& shadow_map_targets, float time) {
   if (!opaque_program || !cutout_program) return;
   if (cascades.size() != shadow_map_targets.size()) {
     LOG_EVERY_N(ERROR, 100)
@@ -186,6 +190,7 @@ void DrawCascadedShadowMap(
 
     cutout_program.Use();
     cutout_program.Uniform("u_view_proj", cascade.view_projection_matrix);
+    BindLayerCompositor(scene, cutout_program, time);
     for (const Geometry* geo_ptr : cutout_geos) {
       const Geometry& geo = *geo_ptr;
       if (!IsAABBInFrustum(geo.bounding_box, planes)) continue;
@@ -195,8 +200,11 @@ void DrawCascadedShadowMap(
           static_cast<size_t>(geo.material_id) < scene.materials.size()) {
         const auto& mat = scene.materials[geo.material_id];
         glBindTextureUnit(0, mat.albedo.texture_id);
+        cutout_program.Uniform("u_material_index", geo.material_id);
+        if (!mat.layers.empty()) BindMaterialLayers(mat, time);
       } else {
         glBindTextureUnit(0, 0);
+        cutout_program.Uniform("u_material_index", -1);
       }
 
       glBindVertexArray(geo.vao);
@@ -218,7 +226,7 @@ void DrawCascadedShadowMap(
 
 void DrawShadowAtlas(Scene& scene, const ShaderProgram& opaque_program,
                      const ShaderProgram& cutout_program,
-                     const RenderTarget& shadow_atlas) {
+                     const RenderTarget& shadow_atlas, float time) {
   if (!opaque_program || !cutout_program) return;
 
   glEnable(GL_DEPTH_TEST);
@@ -312,6 +320,7 @@ void DrawShadowAtlas(Scene& scene, const ShaderProgram& opaque_program,
 
     cutout_program.Use();
     cutout_program.Uniform("u_view_proj", light.shadow_view_proj);
+    BindLayerCompositor(scene, cutout_program, time);
     for (const Geometry* geo_ptr : cutout_geos) {
       const Geometry& geo = *geo_ptr;
       if (!IsAABBInFrustum(geo.bounding_box, planes)) continue;
@@ -320,8 +329,11 @@ void DrawShadowAtlas(Scene& scene, const ShaderProgram& opaque_program,
           static_cast<size_t>(geo.material_id) < scene.materials.size()) {
         const auto& mat = scene.materials[geo.material_id];
         glBindTextureUnit(0, mat.albedo.texture_id);
+        cutout_program.Uniform("u_material_index", geo.material_id);
+        if (!mat.layers.empty()) BindMaterialLayers(mat, time);
       } else {
         glBindTextureUnit(0, 0);
+        cutout_program.Uniform("u_material_index", -1);
       }
       glBindVertexArray(geo.vao);
       if (geo.index_count > 0) {

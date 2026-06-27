@@ -2,16 +2,13 @@
 
 #include <glog/logging.h>
 
-#include <algorithm>
-#include <cmath>
-
 #include "cascade.h"
 #include "compute_light_tile.h"
 #include "culling.h"
 #include "draw_sky.h"
 #include "glad.h"
+#include "q3_layer_bind.h"
 #include "shader.h"
-#include "ssbo.h"
 
 namespace sh_renderer {
 
@@ -19,31 +16,6 @@ namespace {
 
 const char* kRadianceVertex = "glsl/radiance.vert";
 const char* kRadianceFragment = "glsl/radiance.frag";
-
-// Layer sampler array base unit; must match `layout(binding=16)` for u_layers in
-// q3_composite.glsl.
-constexpr int kLayerSamplerBase = 16;
-
-// Binds a layered material's stage textures to u_layers[0..], selecting the
-// active animMap frame on the CPU. Unused slots get a valid default so the
-// sampler array is complete.
-void BindMaterialLayers(const Material& mat, float time) {
-  int n = std::min(static_cast<int>(mat.layers.size()), kMaxLayers);
-  for (int j = 0; j < n; ++j) {
-    const Layer& layer = mat.layers[j];
-    uint32_t tex_id = layer.texture.texture_id;
-    if (!layer.anim_frames.empty()) {
-      int count = static_cast<int>(layer.anim_frames.size());
-      int frame = static_cast<int>(std::floor(time * layer.anim_freq));
-      frame = ((frame % count) + count) % count;  // wrap, tolerate negatives
-      tex_id = layer.anim_frames[frame].texture_id;
-    }
-    glBindTextureUnit(kLayerSamplerBase + j, tex_id);
-  }
-  for (int j = n; j < kMaxLayers; ++j) {
-    glBindTextureUnit(kLayerSamplerBase + j, mat.albedo.texture_id);
-  }
-}
 
 }  // namespace
 
@@ -159,10 +131,7 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
   }
 
   // SH_material_layers descriptors + animation clock for the layer compositor.
-  BindSSBO(scene.material_range_ssbo, 3);
-  BindSSBO(scene.material_layer_ssbo, 4);
-  BindSSBO(scene.material_tcmod_ssbo, 5);
-  program.Uniform("u_time", time);
+  BindLayerCompositor(scene, program, time);
 
   Eigen::Vector4f planes[6];
   ExtractFrustumPlanes(GetViewProjMatrix(camera), planes);

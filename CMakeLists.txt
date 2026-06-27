@@ -81,6 +81,7 @@ set(LIB_SOURCES
     src/interaction.cpp
     src/implementations.cpp
     src/loader.cpp
+    src/q3_layer_bind.cpp
     src/render_target.cpp
     src/scene.cpp
     src/shader.cpp
@@ -101,6 +102,7 @@ set(LIB_HEADERS
     src/input.h
     src/interaction.h
     src/loader.h
+    src/q3_layer_bind.h
     src/render_target.h
     src/scene.h
     src/shader.h

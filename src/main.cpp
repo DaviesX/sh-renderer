@@ -156,6 +156,10 @@ void Run(const std::filesystem::path& scene_path) {
 
     glViewport(0, 0, fb_width, fb_height);
 
+    // Animation clock, captured once so the depth pre-pass cutout coverage and
+    // the radiance pass agree on each animMap/tcMod frame within a frame.
+    const float time = static_cast<float>(glfwGetTime());
+
     // Enable depth testing.
     glEnable(GL_DEPTH_TEST);
 
@@ -164,7 +168,7 @@ void Run(const std::filesystem::path& scene_path) {
     UploadLightsToGPU(*scene);
 
     DrawShadowAtlas(*scene, cascaded_shadow_map_opaque_program,
-                    cascaded_shadow_map_cutout_program, spot_shadow_atlas);
+                    cascaded_shadow_map_cutout_program, spot_shadow_atlas, time);
 
     // 1. Depth Pre-pass
     // Bind Depth+Normal target
@@ -178,10 +182,10 @@ void Run(const std::filesystem::path& scene_path) {
     }
     DrawCascadedShadowMap(*scene, camera, cascaded_shadow_map_opaque_program,
                           cascaded_shadow_map_cutout_program, sun_cascades,
-                          sun_shadow_map_targets);
+                          sun_shadow_map_targets, time);
 
     DrawDepthWNormal(*scene, camera, depth_opaque_program, depth_cutout_program,
-                     depth_normal_target);
+                     depth_normal_target, time);
 
     // 1.2 SSAO Pass
     DrawSSAO(depth_normal_target, camera, ssao_program, ssao_ctx, ssao_target);
@@ -197,8 +201,7 @@ void Run(const std::filesystem::path& scene_path) {
     // DrawRadiance will handle clearing color, setting LEQUAL, etc.
     DrawSceneRadiance(*scene, camera, sun_shadow_map_targets, sun_cascades,
                       spot_shadow_atlas, tile_light_list, ssao_blur_target,
-                      radiance_program, hdr_target,
-                      static_cast<float>(glfwGetTime()));
+                      radiance_program, hdr_target, time);
 
     SunLight default_sun;
     default_sun.direction = Eigen::Vector3f(0.5f, -1.0f, 0.1f).normalized();

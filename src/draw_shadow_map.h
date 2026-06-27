@@ -18,20 +18,24 @@ ShaderProgram CreateShadowMapCutoutProgram();
 std::vector<RenderTarget> CreateCascadedShadowMapTargets();
 
 // Draws the cascaded shadow maps in the sun light's perspective over the
-// camera's view frustum.
+// camera's view frustum. `time` drives the layer compositor on the cutout path
+// so shadow coverage matches the radiance pass.
 void DrawCascadedShadowMap(const Scene& scene, const Camera& camera,
                            const ShaderProgram& opaque_program,
                            const ShaderProgram& cutout_program,
                            const std::vector<Cascade>& cascades,
-                           const std::vector<RenderTarget>& shadow_map_targets);
+                           const std::vector<RenderTarget>& shadow_map_targets,
+                           float time);
 
 // Creates a large depth shadow atlas target.
 RenderTarget CreateShadowAtlasTarget(int size = 2048);
 
-// Renders the spot light shadow maps into the shadow atlas.
+// Renders the spot light shadow maps into the shadow atlas. `time` drives the
+// layer compositor on the cutout path so shadow coverage matches the radiance
+// pass.
 void DrawShadowAtlas(Scene& scene, const ShaderProgram& opaque_program,
                      const ShaderProgram& cutout_program,
-                     const RenderTarget& shadow_atlas);
+                     const RenderTarget& shadow_atlas, float time);
 
 // Creates a shadow map visualization shader program.
 ShaderProgram CreateShadowMapVisualizationProgram();
