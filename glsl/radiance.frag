@@ -88,6 +88,11 @@ layout(std430, binding = 2) readonly buffer TileLightIndexBuffer {
                      // indices.
 };
 
+// Quake 3 layer-stack compositor (SH_material_layers). Declares the material
+// descriptor SSBOs (bindings 3-5), u_layers (binding 16+), u_time and
+// u_material_index, and q3Composite(); uses u_albedo_texture (binding 0) above.
+#include "q3_composite.glsl"
+
 const float PI = 3.14159265359;
 
 // --- PBR Functions ---
@@ -371,7 +376,9 @@ LightmapTexel GetLightmapTexel() {
 
 void main() {
   // 1. Material Properties
-  vec4 albedo_sample = texture(u_albedo_texture, v_uv);
+  // Composite the Quake 3 layer stack (or just the modern albedo for plain PBR
+  // materials) into albedo + coverage.
+  vec4 albedo_sample = q3Composite(u_material_index, v_uv, u_time);
   vec3 albedo = albedo_sample.rgb;
   float alpha = albedo_sample.a;
 

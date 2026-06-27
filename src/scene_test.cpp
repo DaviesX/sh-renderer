@@ -124,6 +124,7 @@ TEST(SceneTest, BuildLayerBuffersPacksStack) {
   // Material 1: two layers; layer 0 has two tcMods, layer 1 a wave rgbGen.
   materials[1].name = "layered";
   materials[1].base_layer = 1;
+  materials[1].albedo.channels = 4;  // modern albedo carries alpha
   Layer l0;
   l0.blend_src = BlendFactor::kOne;
   l0.blend_dst = BlendFactor::kZero;
@@ -150,6 +151,8 @@ TEST(SceneTest, BuildLayerBuffersPacksStack) {
   EXPECT_EQ(gpu_materials[1].layer_count, 2);
   EXPECT_EQ(gpu_materials[1].layer_offset, 0);  // material 0 contributed none
   EXPECT_EQ(gpu_materials[1].base_layer, 1);
+  EXPECT_EQ(gpu_materials[0].modern_has_alpha, 0);  // plain, 0 channels
+  EXPECT_EQ(gpu_materials[1].modern_has_alpha, 1);  // 4-channel albedo
 
   ASSERT_EQ(gpu_layers.size(), 2u);
   EXPECT_EQ(gpu_layers[0].blend_src, static_cast<int>(BlendFactor::kOne));

@@ -2,12 +2,16 @@
 
 #include <glog/logging.h>
 
+#include <algorithm>
+#include <cmath>
+
 #include "cascade.h"
 #include "compute_light_tile.h"
 #include "culling.h"
 #include "draw_sky.h"
 #include "glad.h"
 #include "shader.h"
+#include "ssbo.h"
 
 namespace sh_renderer {
 
@@ -16,12 +20,38 @@ namespace {
 const char* kRadianceVertex = "glsl/radiance.vert";
 const char* kRadianceFragment = "glsl/radiance.frag";
 
+// Layer sampler array base unit; must match `layout(binding=16)` for u_layers in
+// q3_composite.glsl.
+constexpr int kLayerSamplerBase = 16;
+
+// Binds a layered material's stage textures to u_layers[0..], selecting the
+// active animMap frame on the CPU. Unused slots get a valid default so the
+// sampler array is complete.
+void BindMaterialLayers(const Material& mat, float time) {
+  int n = std::min(static_cast<int>(mat.layers.size()), kMaxLayers);
+  for (int j = 0; j < n; ++j) {
+    const Layer& layer = mat.layers[j];
+    uint32_t tex_id = layer.texture.texture_id;
+    if (!layer.anim_frames.empty()) {
+      int count = static_cast<int>(layer.anim_frames.size());
+      int frame = static_cast<int>(std::floor(time * layer.anim_freq));
+      frame = ((frame % count) + count) % count;  // wrap, tolerate negatives
+      tex_id = layer.anim_frames[frame].texture_id;
+    }
+    glBindTextureUnit(kLayerSamplerBase + j, tex_id);
+  }
+  for (int j = n; j < kMaxLayers; ++j) {
+    glBindTextureUnit(kLayerSamplerBase + j, mat.albedo.texture_id);
+  }
+}
+
 }  // namespace
 
 ShaderProgram CreateRadianceProgram() {
   auto program = ShaderProgram::CreateGraphics(
       kRadianceVertex, kRadianceFragment,
-      {{"NUM_CASCADES", std::to_string(kNumShadowMapCascades)}});
+      {{"NUM_CASCADES", std::to_string(kNumShadowMapCascades)},
+       {"MAX_LAYERS", std::to_string(kMaxLayers)}});
   if (!program) {
     LOG(FATAL) << "Failed to create radiance shader program.";
     return {};
@@ -36,7 +66,7 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
                        const TileLightListList& tile_light_list,
                        const RenderTarget& ssao_target,
                        const ShaderProgram& program,
-                       const RenderTarget& hdr_target) {
+                       const RenderTarget& hdr_target, float time) {
   if (!program) return;
   program.Use();
 
@@ -128,6 +158,12 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
     glBindTextureUnit(12, 0);
   }
 
+  // SH_material_layers descriptors + animation clock for the layer compositor.
+  BindSSBO(scene.material_range_ssbo, 3);
+  BindSSBO(scene.material_layer_ssbo, 4);
+  BindSSBO(scene.material_tcmod_ssbo, 5);
+  program.Uniform("u_time", time);
+
   Eigen::Vector4f planes[6];
   ExtractFrustumPlanes(GetViewProjMatrix(camera), planes);
 
@@ -149,6 +185,10 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
         glBindTextureUnit(1, mat.normal_texture.texture_id);
         glBindTextureUnit(2, mat.metallic_roughness_texture.texture_id);
 
+        // Layer compositor: which material to read, and its stage textures.
+        program.Uniform("u_material_index", geo.material_id);
+        if (!mat.layers.empty()) BindMaterialLayers(mat, time);
+
         program.Uniform("u_emissive_factor", mat.emissive_factor);
         program.Uniform("u_emissive_strength", mat.emissive_strength);
 
@@ -164,6 +204,7 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
         glBindTextureUnit(1, 0);
         glBindTextureUnit(2, 0);
         glBindTextureUnit(3, 0);
+        program.Uniform("u_material_index", -1);
         program.Uniform("u_has_emissive_texture", 0);
         program.Uniform("u_emissive_factor",
                         Eigen::Vector3f(Eigen::Vector3f::Zero()));

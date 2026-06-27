@@ -197,7 +197,8 @@ void Run(const std::filesystem::path& scene_path) {
     // DrawRadiance will handle clearing color, setting LEQUAL, etc.
     DrawSceneRadiance(*scene, camera, sun_shadow_map_targets, sun_cascades,
                       spot_shadow_atlas, tile_light_list, ssao_blur_target,
-                      radiance_program, hdr_target);
+                      radiance_program, hdr_target,
+                      static_cast<float>(glfwGetTime()));
 
     SunLight default_sun;
     default_sun.direction = Eigen::Vector3f(0.5f, -1.0f, 0.1f).normalized();
