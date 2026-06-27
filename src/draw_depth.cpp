@@ -2,7 +2,10 @@
 
 #include <glog/logging.h>
 
+#include <string>
+
 #include "glad.h"
+#include "q3_layer_bind.h"
 
 namespace sh_renderer {
 
@@ -54,7 +57,8 @@ ShaderProgram CreateDepthOpaqueProgram() {
 
 ShaderProgram CreateDepthCutoutProgram() {
   auto program = ShaderProgram::CreateGraphics(
-      "glsl/depth.vert", "glsl/depth.frag", {{"CUTOUT", "1"}});
+      "glsl/depth.vert", "glsl/depth.frag",
+      {{"CUTOUT", "1"}, {"MAX_LAYERS", std::to_string(kMaxLayers)}});
   if (!program) {
     LOG(ERROR) << "Failed to create depth shader program.";
     return {};
@@ -73,9 +77,9 @@ ShaderProgram CreateDepthOpaqueWNormalProgram() {
 }
 
 ShaderProgram CreateDepthCutoutWNormalProgram() {
-  auto program = ShaderProgram::CreateGraphics("glsl/depth_w_normal.vert",
-                                               "glsl/depth_w_normal.frag",
-                                               {{"CUTOUT", "1"}});
+  auto program = ShaderProgram::CreateGraphics(
+      "glsl/depth_w_normal.vert", "glsl/depth_w_normal.frag",
+      {{"CUTOUT", "1"}, {"MAX_LAYERS", std::to_string(kMaxLayers)}});
   if (!program) {
     LOG(ERROR) << "Failed to create depth shader program.";
     return {};
@@ -95,8 +99,8 @@ ShaderProgram CreateDepthVisualizerProgram() {
 
 void DrawDepth(const Scene& scene, const Camera& camera,
                const ShaderProgram& opaque_program,
-               const ShaderProgram& cutout_program,
-               const RenderTarget& target) {
+               const ShaderProgram& cutout_program, const RenderTarget& target,
+               float time) {
   if (!opaque_program || !cutout_program) return;
 
   // Bind FBO
@@ -152,18 +156,23 @@ void DrawDepth(const Scene& scene, const Camera& camera,
   // Draw the cutout geometries.
   cutout_program.Use();
   cutout_program.Uniform("u_view_proj", GetViewProjMatrix(camera));
+  BindLayerCompositor(scene, cutout_program, time);
 
   for (const Geometry* geo_ptr : cutout_geos) {
     const Geometry& geo = *geo_ptr;
     cutout_program.Uniform("u_model", geo.transform.matrix());
 
-    // For cutout transparency, we need to bind the albedo texture.
+    // For cutout coverage, bind the albedo texture and (for layered materials)
+    // the stage textures so q3Composite() reproduces the radiance pass alpha.
     if (geo.material_id >= 0 &&
         static_cast<size_t>(geo.material_id) < scene.materials.size()) {
       const auto& mat = scene.materials[geo.material_id];
       glBindTextureUnit(0, mat.albedo.texture_id);
+      cutout_program.Uniform("u_material_index", geo.material_id);
+      if (!mat.layers.empty()) BindMaterialLayers(mat, time);
     } else {
       glBindTextureUnit(0, 0);
+      cutout_program.Uniform("u_material_index", -1);
     }
 
     glBindVertexArray(geo.vao);
@@ -183,7 +192,7 @@ void DrawDepth(const Scene& scene, const Camera& camera,
 void DrawDepthWNormal(const Scene& scene, const Camera& camera,
                       const ShaderProgram& opaque_program,
                       const ShaderProgram& cutout_program,
-                      const RenderTarget& target) {
+                      const RenderTarget& target, float time) {
   if (!opaque_program || !cutout_program) return;
 
   // Bind FBO
@@ -252,18 +261,23 @@ void DrawDepthWNormal(const Scene& scene, const Camera& camera,
   cutout_program.Use();
   cutout_program.Uniform("u_view_proj", GetViewProjMatrix(camera));
   cutout_program.Uniform("u_view", view);
+  BindLayerCompositor(scene, cutout_program, time);
 
   for (const Geometry* geo_ptr : cutout_geos) {
     const Geometry& geo = *geo_ptr;
     cutout_program.Uniform("u_model", geo.transform.matrix());
 
-    // For cutout transparency, we need to bind the albedo texture.
+    // For cutout coverage, bind the albedo texture and (for layered materials)
+    // the stage textures so q3Composite() reproduces the radiance pass alpha.
     if (geo.material_id >= 0 &&
         static_cast<size_t>(geo.material_id) < scene.materials.size()) {
       const auto& mat = scene.materials[geo.material_id];
       glBindTextureUnit(0, mat.albedo.texture_id);
+      cutout_program.Uniform("u_material_index", geo.material_id);
+      if (!mat.layers.empty()) BindMaterialLayers(mat, time);
     } else {
       glBindTextureUnit(0, 0);
+      cutout_program.Uniform("u_material_index", -1);
     }
 
     glBindVertexArray(geo.vao);
