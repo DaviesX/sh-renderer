@@ -153,6 +153,8 @@ void DrawCascadedShadowMap(
     if (geo.material_id >= 0 &&
         static_cast<size_t>(geo.material_id) < scene.materials.size()) {
       const auto& mat = scene.materials[geo.material_id];
+      // Additive surfaces are translucent; they cast no solid shadow.
+      if (mat.additive) continue;
       if (mat.alpha_cutout) {
         cutout_geos.push_back(&geo);
       } else {
@@ -246,6 +248,8 @@ void DrawShadowAtlas(Scene& scene, const ShaderProgram& opaque_program,
     if (geo.material_id >= 0 &&
         static_cast<size_t>(geo.material_id) < scene.materials.size()) {
       const auto& mat = scene.materials[geo.material_id];
+      // Additive surfaces are translucent; they cast no solid shadow.
+      if (mat.additive) continue;
       if (mat.alpha_cutout) {
         cutout_geos.push_back(&geo);
       } else {

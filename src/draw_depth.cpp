@@ -127,6 +127,9 @@ void DrawDepth(const Scene& scene, const Camera& camera,
     if (geo.material_id >= 0 &&
         static_cast<size_t>(geo.material_id) < scene.materials.size()) {
       const auto& mat = scene.materials[geo.material_id];
+      // Additive surfaces render only in the additive pass; they do not write
+      // depth.
+      if (mat.additive) continue;
       if (mat.alpha_cutout) {
         cutout_geos.push_back(&geo);
       } else {
@@ -228,6 +231,9 @@ void DrawDepthWNormal(const Scene& scene, const Camera& camera,
     if (geo.material_id >= 0 &&
         static_cast<size_t>(geo.material_id) < scene.materials.size()) {
       const auto& mat = scene.materials[geo.material_id];
+      // Additive surfaces render only in the additive pass; they do not write
+      // depth.
+      if (mat.additive) continue;
       if (mat.alpha_cutout) {
         cutout_geos.push_back(&geo);
       } else {

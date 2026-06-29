@@ -70,6 +70,7 @@ set(LIB_SOURCES
     src/cascade.cpp
     src/compute_light_tile.cpp
     src/culling.cpp
+    src/draw_additive.cpp
     src/draw_depth.cpp
     src/draw_radiance.cpp
     src/draw_ssao.cpp
@@ -94,6 +95,7 @@ set(LIB_HEADERS
     src/colorspace.h
     src/compute_light_tile.h
     src/culling.h
+    src/draw_additive.h
     src/draw_depth.h
     src/draw_radiance.h
     src/draw_shadow_map.h

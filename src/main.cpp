@@ -5,6 +5,7 @@
 #include <string>
 
 #include "compute_light_tile.h"
+#include "draw_additive.h"
 #include "draw_depth.h"
 #include "draw_radiance.h"
 #include "draw_shadow_map.h"
@@ -62,6 +63,7 @@ void Run(const std::filesystem::path& scene_path) {
   ShaderProgram depth_vis_program = CreateDepthVisualizerProgram();
   ShaderProgram shadow_vis_program = CreateShadowMapVisualizationProgram();
   ShaderProgram radiance_program = CreateRadianceProgram();
+  ShaderProgram additive_program = CreateAdditiveProgram();
   ShaderProgram sky_program = CreateSkyAnalyticProgram();
   ShaderProgram tonemap_program = CreateTonemapProgram();
   ShaderProgram light_cull_program = CreateLightCullProgram();
@@ -73,7 +75,8 @@ void Run(const std::filesystem::path& scene_path) {
   if (!cascaded_shadow_map_opaque_program ||
       !cascaded_shadow_map_cutout_program || !depth_opaque_program ||
       !depth_cutout_program || !depth_vis_program || !shadow_vis_program ||
-      !radiance_program || !sky_program || !tonemap_program ||
+      !radiance_program || !additive_program || !sky_program ||
+      !tonemap_program ||
       !light_cull_program || !ssao_program || !ssao_blur_horizontal_program ||
       !ssao_blur_vertical_program || !ssao_vis_program) {
     LOG(ERROR) << "Failed to create shader programs.";
@@ -210,6 +213,10 @@ void Run(const std::filesystem::path& scene_path) {
     SunLight active_sun = scene->sun_light.value_or(default_sun);
 
     DrawSkyAnalytic(*scene, camera, active_sun, hdr_target, sky_program);
+
+    // 2.5. Additive transparent pass (flames/glows): adds onto the lit scene and
+    // sky in HDR, tests the opaque depth but writes none.
+    DrawAdditive(*scene, camera, additive_program, hdr_target, time);
 
     // 3. Tonemapping (to default framebuffer)
     DrawTonemap(hdr_target, tonemap_program);
