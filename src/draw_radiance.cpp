@@ -171,6 +171,7 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
 
   for (const auto& geo : scene.geometries) {
     if (geo.vao == 0) continue;
+    if (geo.material_id < 0) continue;  // pure occluder shell — shadow/depth only
     if (!IsAABBInFrustum(geo.bounding_box, planes)) continue;
 
     program.Uniform("u_model", geo.transform.matrix());
