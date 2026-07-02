@@ -68,23 +68,22 @@ bool ProcessPrimitive(const tinygltf::Model& model,
                       const tinygltf::Primitive& primitive,
                       const Eigen::Affine3f& transform,
                       std::vector<Geometry>* result) {
-  // Precondition.
-  if (primitive.material < 0) {
-    LOG(ERROR) << "Primitive missing material.";
-    return false;
-  }
+  // Material-less primitives (material == -1) are pure occluder shells — they
+  // must reach the shadow/depth passes but are excluded from the radiance pass.
+  // Accept them; all other primitives require a material.
   if (primitive.attributes.find("POSITION") == primitive.attributes.end()) {
     LOG(ERROR) << "Primitive missing POSITION attribute.";
     return false;
   }
   if (primitive.attributes.find("NORMAL") == primitive.attributes.end()) {
-    LOG(ERROR) << "Primitive missing NORMAL attribute. Baking requires Vertex "
-                  "Normals.";
+    LOG(ERROR) << "Primitive missing NORMAL attribute.";
     return false;
   }
-  if (primitive.attributes.find("TEXCOORD_0") == primitive.attributes.end()) {
-    LOG(ERROR) << "Primitive missing TEXCOORD_0 attribute. Baking requires "
-                  "UVs.";
+  // Texture UVs are required for shaded (material) geometry; occluder shells
+  // carry none.
+  if (primitive.material >= 0 &&
+      primitive.attributes.find("TEXCOORD_0") == primitive.attributes.end()) {
+    LOG(ERROR) << "Primitive missing TEXCOORD_0 attribute.";
     return false;
   }
 
@@ -284,8 +283,9 @@ bool ProcessPrimitive(const tinygltf::Model& model,
     }
   }
 
-  // Tangent Generation Logic
-  if (geo.tangents.empty()) {
+  // Tangents are required for shaded geometry (normal-mapped PBR); occluder
+  // shells never reach the radiance pass, so they don't need them.
+  if (geo.tangents.empty() && geo.material_id >= 0) {
     LOG(ERROR) << "Primitive missing tangents.";
     return false;
   }
