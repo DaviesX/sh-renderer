@@ -4,7 +4,9 @@
 
 #include <filesystem>
 
-namespace sh_baker {
+#include "scene.h"
+
+namespace sh_renderer {
 
 TEST(LoaderTest, LoadCube) {
   // Assuming working directory is set correctly or absolute path used.
@@ -80,4 +82,26 @@ TEST(LoaderTest, LoadBoxFallbackColor) {
   EXPECT_EQ(mat.albedo.pixel_data[3], 255);
 }
 
-}  // namespace sh_baker
+// A glTF primitive with no material field is a pure occluder shell. The loader
+// must accept it (not return nullopt) and expose it with material_id == -1.
+TEST(LoaderTest, OccluderShellAccepted) {
+  std::filesystem::path input_path = "data/occluder_shell/scene.gltf";
+  ASSERT_TRUE(std::filesystem::exists(input_path))
+      << "Test file not found: " << input_path;
+
+  std::optional<Scene> scene = LoadScene(input_path);
+  ASSERT_TRUE(scene.has_value()) << "LoadScene must not fail on a material-less primitive.";
+
+  ASSERT_EQ(scene->geometries.size(), 1u);
+  EXPECT_EQ(scene->geometries[0].material_id, -1);
+  EXPECT_EQ(scene->geometries[0].vertices.size(), 3u);
+  EXPECT_EQ(scene->geometries[0].indices.size(), 3u);
+  // Texture UVs still populated (zeros) so downstream code doesn't crash;
+  // lightmap UVs must be absent — there are none on an occluder shell.
+  EXPECT_EQ(scene->geometries[0].texture_uvs.size(), 3u);
+  EXPECT_TRUE(scene->geometries[0].lightmap_uvs.empty());
+  // Tangents must be absent — occluder shells have no tangents.
+  EXPECT_TRUE(scene->geometries[0].tangents.empty());
+}
+
+}  // namespace sh_renderer

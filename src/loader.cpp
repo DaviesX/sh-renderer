@@ -68,23 +68,22 @@ bool ProcessPrimitive(const tinygltf::Model& model,
                       const tinygltf::Primitive& primitive,
                       const Eigen::Affine3f& transform,
                       std::vector<Geometry>* result) {
-  // Precondition.
-  if (primitive.material < 0) {
-    LOG(ERROR) << "Primitive missing material.";
-    return false;
-  }
+  // Material-less primitives (material == -1) are pure occluder shells — they
+  // must reach the shadow/depth passes but are excluded from the radiance pass.
+  // Accept them; all other primitives require a material.
   if (primitive.attributes.find("POSITION") == primitive.attributes.end()) {
     LOG(ERROR) << "Primitive missing POSITION attribute.";
     return false;
   }
   if (primitive.attributes.find("NORMAL") == primitive.attributes.end()) {
-    LOG(ERROR) << "Primitive missing NORMAL attribute. Baking requires Vertex "
-                  "Normals.";
+    LOG(ERROR) << "Primitive missing NORMAL attribute.";
     return false;
   }
-  if (primitive.attributes.find("TEXCOORD_0") == primitive.attributes.end()) {
-    LOG(ERROR) << "Primitive missing TEXCOORD_0 attribute. Baking requires "
-                  "UVs.";
+  // Texture UVs are required for shaded (material) geometry; occluder shells
+  // carry none.
+  if (primitive.material >= 0 &&
+      primitive.attributes.find("TEXCOORD_0") == primitive.attributes.end()) {
+    LOG(ERROR) << "Primitive missing TEXCOORD_0 attribute.";
     return false;
   }
 
@@ -284,8 +283,9 @@ bool ProcessPrimitive(const tinygltf::Model& model,
     }
   }
 
-  // Tangent Generation Logic
-  if (geo.tangents.empty()) {
+  // Tangents are required for shaded geometry (normal-mapped PBR); occluder
+  // shells never reach the radiance pass, so they don't need them.
+  if (geo.tangents.empty() && geo.material_id >= 0) {
     LOG(ERROR) << "Primitive missing tangents.";
     return false;
   }
@@ -640,6 +640,28 @@ void ProcessMaterials(const tinygltf::Model& model,
       // clears the flag that the modern-albedo check above may have set.
       mat.alpha_cutout = mat.albedo.channels == 4 ||
                          mat.layers[mat.base_layer].texture.channels == 4;
+
+      // Classify additive (order-independent) transparency: a layered surface
+      // whose every stage blends with dst factor GL_ONE (flames, glows, plasma).
+      // It has no opaque base to write depth, so it renders only in the additive
+      // pass (glBlendFunc GL_ONE, GL_ONE) where black texels add nothing -- never
+      // in the opaque/cutout/depth/shadow passes. Sampling the base layer's
+      // modern albedo would freeze animMap frames and use a "modernized" map that
+      // does not exist for a flame, so disable the base substitution
+      // (base_layer = -1) and let every stage sample its own animated texture;
+      // coverage/alpha is unused for additive blending.
+      bool all_additive = true;
+      for (const auto& layer : mat.layers) {
+        if (layer.blend_dst != BlendFactor::kOne) {
+          all_additive = false;
+          break;
+        }
+      }
+      if (all_additive) {
+        mat.additive = true;
+        mat.alpha_cutout = false;
+        mat.base_layer = -1;
+      }
     }
 
     result->push_back(std::move(mat));

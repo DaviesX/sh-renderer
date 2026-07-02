@@ -91,8 +91,15 @@ struct Material {
   // Alpha Cutout.
   bool alpha_cutout = false;
 
+  // Additive (order-independent) transparency: every layer blends with dst
+  // factor GL_ONE (flames, glows, plasma). Such materials render only in the
+  // additive pass (GL_ONE/GL_ONE), never the opaque/cutout/depth/shadow passes.
+  bool additive = false;
+
   // Quake 3 shader stack from SH_material_layers (empty for plain PBR materials).
   std::vector<Layer> layers;
+  // Index of the layer whose colour comes from the modern albedo; -1 for
+  // additive materials, where every stage samples its own (animated) texture.
   int base_layer = 0;
   CullMode cull_mode = CullMode::kFront;
 };
