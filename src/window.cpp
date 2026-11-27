@@ -1,10 +1,10 @@
 #include "window.h"
 
-#include <glog/logging.h>
-
 #include <optional>
 #include <string>
 #include <string_view>
+
+#include "log.h"
 
 namespace sh_renderer {
 

@@ -1,10 +1,10 @@
 #include "shader.h"
 
-#include <glog/logging.h>
-
 #include <fstream>
 #include <iostream>
 #include <sstream>
+
+#include "log.h"
 
 namespace sh_renderer {
 namespace {

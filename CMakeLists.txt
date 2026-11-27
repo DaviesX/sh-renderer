@@ -19,7 +19,6 @@ add_link_options(
 
 # Dependencies
 find_package(GTest)
-find_package(glog REQUIRED)
 find_package(gflags REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(glfw3 REQUIRED)
@@ -81,6 +80,7 @@ set(LIB_SOURCES
     src/interaction.cpp
     src/implementations.cpp
     src/loader.cpp
+    src/log.cpp
     src/render_target.cpp
     src/scene.cpp
     src/shader.cpp
@@ -101,6 +101,7 @@ set(LIB_HEADERS
     src/input.h
     src/interaction.h
     src/loader.h
+    src/log.h
     src/render_target.h
     src/scene.h
     src/shader.h
@@ -112,7 +113,6 @@ target_include_directories(sh_renderer PUBLIC
     src
 )
 target_link_libraries(sh_renderer PUBLIC
-    glog::glog
     gflags
     OpenGL::GL
     glfw
@@ -145,6 +145,7 @@ add_executable(sh_renderer_test
     src/interaction_test.cpp
     src/loader_layers_test.cpp
     src/loader_test.cpp
+    src/log_test.cpp
     src/scene_test.cpp
     src/shader_test.cpp
     src/window_test.cpp

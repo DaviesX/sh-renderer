@@ -1,5 +1,4 @@
 #include <gflags/gflags.h>
-#include <glog/logging.h>
 
 #include <filesystem>
 #include <string>
@@ -14,6 +13,7 @@
 #include "input.h"
 #include "interaction.h"
 #include "loader.h"
+#include "log.h"
 #include "render_target.h"
 #include "scene.h"
 #include "window.h"
@@ -256,10 +256,6 @@ void Run(const std::filesystem::path& scene_path) {
 int main(int argc, char** argv) {
   gflags::SetUsageMessage("Simulating mixed lighting renderer.");
   gflags::ParseCommandLineFlags(&argc, &argv, true);
-  google::InitGoogleLogging(argv[0]);
-
-  // Log to stderr also
-  FLAGS_logtostderr = 1;
 
   if (FLAGS_input.empty()) {
     LOG(ERROR)

@@ -1,7 +1,5 @@
 #include "loader.h"
 
-#include <glog/logging.h>
-
 #include <Eigen/Geometry>
 #include <algorithm>
 #include <cmath>
@@ -9,6 +7,7 @@
 #include <iostream>
 
 #include "colorspace.h"
+#include "log.h"
 #include "scene.h"
 #include "tiny_gltf.h"
 
@@ -371,7 +370,8 @@ void LoadTexture(const tinygltf::Model& model, int tex_idx,
 }
 
 // --- SH_material_layers parsing (mirrors sh-baker/src/layer_composite.cpp +
-// sh-baker/src/loader.cpp so the GLSL compositor can match the baker at t=0). ---
+// sh-baker/src/loader.cpp so the GLSL compositor can match the baker at
+// t=0). ---
 
 BlendFactor ParseBlendFactor(const std::string& name) {
   if (name == "ZERO") return BlendFactor::kZero;
@@ -420,8 +420,9 @@ RgbGen ParseRgbGen(const tinygltf::Value& obj) {
     gen.type = RgbGenType::kExactVertex;
   } else if (type == "WAVE") {
     gen.type = RgbGenType::kWave;
-    gen.wave = obj.Has("func") ? ParseWaveType(obj.Get("func").Get<std::string>())
-                               : WaveType::kSine;
+    gen.wave = obj.Has("func")
+                   ? ParseWaveType(obj.Get("func").Get<std::string>())
+                   : WaveType::kSine;
     auto num = [&](const char* k) -> float {
       return obj.Has(k) ? float(obj.Get(k).GetNumberAsDouble()) : 0.0f;
     };
@@ -630,14 +631,16 @@ void ProcessMaterials(const tinygltf::Model& model,
           static_cast<uint8_t>(metallic * 255)};
     }
 
-    // Quake 3 layer stack (SH_material_layers), retained for the GLSL compositor.
+    // Quake 3 layer stack (SH_material_layers), retained for the GLSL
+    // compositor.
     ParseMaterialLayers(model, gltf_mat, base_path, &mat);
     if (!mat.layers.empty()) {
       // Coverage matches the baker: the modern albedo's alpha when it has one,
-      // otherwise the base layer's Q3 alpha. LoadTexture only keeps a 4th channel
-      // when the image actually has transparency, so channels == 4 means "has
-      // coverage". Recompute (don't just OR-in) so an opaque base layer correctly
-      // clears the flag that the modern-albedo check above may have set.
+      // otherwise the base layer's Q3 alpha. LoadTexture only keeps a 4th
+      // channel when the image actually has transparency, so channels == 4
+      // means "has coverage". Recompute (don't just OR-in) so an opaque base
+      // layer correctly clears the flag that the modern-albedo check above may
+      // have set.
       mat.alpha_cutout = mat.albedo.channels == 4 ||
                          mat.layers[mat.base_layer].texture.channels == 4;
     }
@@ -820,7 +823,8 @@ bool TraverseNodes(const tinygltf::Model& model, int node_index,
 
 void ParseMaterialLayers(const tinygltf::Model& model,
                          const tinygltf::Material& gltf_mat,
-                         const std::filesystem::path& base_path, Material* mat) {
+                         const std::filesystem::path& base_path,
+                         Material* mat) {
   auto it = gltf_mat.extensions.find("SH_material_layers");
   if (it == gltf_mat.extensions.end()) return;
   const tinygltf::Value& ext = it->second;

@@ -1,8 +1,7 @@
 #include "draw_depth.h"
 
-#include <glog/logging.h>
-
 #include "glad.h"
+#include "log.h"
 
 namespace sh_renderer {
 
