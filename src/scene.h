@@ -1,7 +1,5 @@
 #pragma once
 
-#include <embree4/rtcore.h>
-
 #include <Eigen/Dense>
 #include <array>
 #include <cstdint>
@@ -58,9 +56,9 @@ struct Texture32I {
 };
 
 // --- Layer ---
-// One Quake 3 shader stage from `SH_material_layers`. The base layer's colour is
-// the modern `baseColorTexture` (the artist-modernised albedo) substituted at
-// composite time; its own `texture` is kept for coverage (alpha).
+// One Quake 3 shader stage from `SH_material_layers`. The base layer's colour
+// is the modern `baseColorTexture` (the artist-modernised albedo) substituted
+// at composite time; its own `texture` is kept for coverage (alpha).
 struct Layer {
   Texture texture;
   // animMap frames (frame 0 == `texture`); empty for a static `map` stage.
@@ -91,7 +89,8 @@ struct Material {
   // Alpha Cutout.
   bool alpha_cutout = false;
 
-  // Quake 3 shader stack from SH_material_layers (empty for plain PBR materials).
+  // Quake 3 shader stack from SH_material_layers (empty for plain PBR
+  // materials).
   std::vector<Layer> layers;
   int base_layer = 0;
   CullMode cull_mode = CullMode::kFront;
@@ -193,9 +192,9 @@ struct Scene {
   SSBO point_light_list_ssbo;
   SSBO spot_light_list_ssbo;
   // SH_material_layers descriptors (see GpuMaterial/GpuMaterialLayer/GpuTcMod).
-  SSBO material_range_ssbo;   // one GpuMaterial per scene material
-  SSBO material_layer_ssbo;   // flat GpuMaterialLayer array
-  SSBO material_tcmod_ssbo;   // flat GpuTcMod array
+  SSBO material_range_ssbo;  // one GpuMaterial per scene material
+  SSBO material_layer_ssbo;  // flat GpuMaterialLayer array
+  SSBO material_tcmod_ssbo;  // flat GpuTcMod array
   ShadowAtlasContext shadow_atlas;
 };
 
@@ -203,16 +202,17 @@ struct Scene {
 // scalars padded to 16-byte multiples). Layer textures are NOT referenced here:
 // the draw binds each material's layers to a capped sampler array in order and
 // the CPU selects the active animMap frame. The base layer's colour comes from
-// the modern baseColorTexture instead of its sampler (shader checks base_layer).
-// Max layer samplers bound per draw (the shader's `u_layers` array size). Q3
-// materials rarely exceed this; extra stages are dropped.
+// the modern baseColorTexture instead of its sampler (shader checks
+// base_layer). Max layer samplers bound per draw (the shader's `u_layers` array
+// size). Q3 materials rarely exceed this; extra stages are dropped.
 constexpr int kMaxLayers = 8;
 
 struct GpuMaterial {
-  int32_t layer_offset;      // first layer in the flat layer array
-  int32_t layer_count;       // 0 for plain PBR materials
-  int32_t base_layer;        // index within [0, layer_count)
-  int32_t modern_has_alpha;  // 1 if the base coverage comes from the modern albedo
+  int32_t layer_offset;  // first layer in the flat layer array
+  int32_t layer_count;   // 0 for plain PBR materials
+  int32_t base_layer;    // index within [0, layer_count)
+  // 1 if the base coverage comes from the modern albedo.
+  int32_t modern_has_alpha;
 };
 static_assert(sizeof(GpuMaterial) == 16);
 
@@ -235,13 +235,14 @@ static_assert(sizeof(GpuMaterialLayer) == 48);
 struct GpuTcMod {
   int32_t type;  // TcModType
   int32_t wave;  // WaveType (TURB/STRETCH)
-  float v[6];    // SCALE [s,t]; TRANSFORM [m00..m12]; TURB/STRETCH [base,amp,phase,freq]
+  // SCALE [s,t]; TRANSFORM [m00..m12]; TURB/STRETCH [base,amp,phase,freq].
+  float v[6];
 };
 static_assert(sizeof(GpuTcMod) == 32);
 
 // Packs the materials' layer stacks into flat GpuMaterial/GpuMaterialLayer/
-// GpuTcMod arrays (pure CPU; no GL). Every material yields one GpuMaterial (with
-// layer_count 0 for plain PBR). Exposed for testing.
+// GpuTcMod arrays (pure CPU; no GL). Every material yields one GpuMaterial
+// (with layer_count 0 for plain PBR). Exposed for testing.
 void BuildLayerBuffers(const std::vector<Material>& materials,
                        std::vector<GpuMaterial>* out_materials,
                        std::vector<GpuMaterialLayer>* out_layers,
@@ -272,11 +273,6 @@ struct GpuSpotLight {
   float shadow_view_proj[16];
 };
 static_assert(sizeof(GpuSpotLight) == 144);
-
-// Computes the bounding radius of a light from its flux via inverse-square law.
-// radius = sqrt(flux / threshold), where flux = intensity * max(color).
-float ComputeLightRadius(float intensity, const Eigen::Vector3f& color,
-                         float threshold = 0.01f);
 
 // Uploads the scene geometry and textures to the GPU.
 // Populates the GL resource handles in the scene structs.
@@ -313,8 +309,5 @@ std::vector<Eigen::Vector4f> TransformedTangents(const Geometry& geometry);
 
 // Returns the surface area of the geometry.
 float SurfaceArea(const Geometry& geometry);
-
-// Loads the SH lightmap EXRs into the scene.
-void LoadLightmaps(Scene& scene, const std::filesystem::path& gltf_file);
 
 }  // namespace sh_renderer

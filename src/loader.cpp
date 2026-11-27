@@ -7,6 +7,7 @@
 #include <iostream>
 
 #include "colorspace.h"
+#include "gltf_scene_io.h"
 #include "log.h"
 #include "scene.h"
 #include "tiny_gltf.h"
