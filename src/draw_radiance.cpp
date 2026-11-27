@@ -47,17 +47,18 @@ void BindMaterialLayers(const Material& mat, float time) {
 
 }  // namespace
 
-ShaderProgram CreateRadianceProgram() {
-  std::string error;
+ShaderProgram CreateRadianceProgram(std::string* error) {
+  std::string message;
   auto program = ShaderProgram::CreateGraphics(
       kRadianceVertex, kRadianceFragment,
       {{"NUM_CASCADES", std::to_string(kNumShadowMapCascades)},
        {"MAX_LAYERS", std::to_string(kMaxLayers)}},
-      /*reader=*/nullptr, &error);
+      /*reader=*/nullptr, &message);
   if (!program) {
     LOG(ERROR) << "Failed to create radiance shader program ("
                << kRadianceVertex << ", " << kRadianceFragment
-               << "): " << error;
+               << "): " << message;
+    if (error != nullptr) *error = std::move(message);
     return {};
   }
   return std::move(*program);

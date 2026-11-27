@@ -14,13 +14,14 @@ const char* kSkyFragment = "glsl/sky_analytic.frag";
 
 }  // namespace
 
-ShaderProgram CreateSkyAnalyticProgram() {
-  std::string error;
+ShaderProgram CreateSkyAnalyticProgram(std::string* error) {
+  std::string message;
   auto program = ShaderProgram::CreateGraphics(kSkyVertex, kSkyFragment, {},
-                                               /*reader=*/nullptr, &error);
+                                               /*reader=*/nullptr, &message);
   if (!program) {
     LOG(ERROR) << "Failed to create sky analytic shader program (" << kSkyVertex
-               << ", " << kSkyFragment << "): " << error;
+               << ", " << kSkyFragment << "): " << message;
+    if (error != nullptr) *error = std::move(message);
     return {};
   }
   return std::move(*program);

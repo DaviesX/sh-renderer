@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 #include "camera.h"
 #include "render_target.h"
@@ -21,7 +22,7 @@ struct TileLightListList {
 };
 
 // Creates the light cull compute shader program.
-ShaderProgram CreateLightCullProgram();
+ShaderProgram CreateLightCullProgram(std::string* error = nullptr);
 
 // Creates the tile resources sized for the given screen dimensions.
 TileLightListList CreateTileLightList(uint32_t width, uint32_t height);

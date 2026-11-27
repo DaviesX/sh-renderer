@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Eigen/Dense>
+#include <string>
 
 #include "camera.h"
 #include "cascade.h"
@@ -19,7 +20,7 @@ void DrawSceneUnlit(const Scene& scene, const Camera& camera,
                     const ShaderProgram& program);
 
 // Creates a radiance shader program (forward shading).
-ShaderProgram CreateRadianceProgram();
+ShaderProgram CreateRadianceProgram(std::string* error = nullptr);
 
 // Draws the scene with a radiance shader (forward shading).
 void DrawSceneRadiance(const Scene& scene, const Camera& camera,

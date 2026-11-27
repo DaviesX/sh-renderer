@@ -60,10 +60,10 @@ The engine uses a Forward+ architecture. Do not suggest or write code for Deferr
 * **Goal:** Initialize a CMake project with a basic build configuration. Source files go to the `src` directory.
 * **Verification:** A successful build with no errors.
 * **Targets (current layout):**
-  * `sh_renderer_core` (STATIC, `POSITION_INDEPENDENT_CODE ON`, so it can link into a shared module such as ioquake3's `renderer_sh`): camera, cascade, culling, the draw passes and light culling, glad, render targets, scene, shader loader, SSBOs, the logging shim and the file reader. It links only OpenGL and Eigen. It must never link or include glog, gflags, GLFW, tinygltf, tinyexr, Embree or stb_image's implementation.
+  * `sh_renderer_core` (STATIC, `POSITION_INDEPENDENT_CODE ON`, so it can link into a shared module such as ioquake3's `renderer_sh`): camera, cascade, culling, the draw passes and light culling, glad, render targets, scene, shader loader, SSBOs, the logging shim, the file reader, the frame API (`frame.{h,cpp}`) and the engine facade (`engine_api.{h,cpp}`). It links only OpenGL and Eigen. It must never link or include glog, gflags, GLFW, tinygltf, tinyexr, Embree or stb_image's implementation.
   * `sh_renderer_gltf` (STATIC): the glTF loader, `gltf_scene_io` (EXR lightmaps, `ComputeLightRadius`), `implementations.cpp` (tinygltf, stb_image and tinyexr implementations), window, input and interaction. It links the core plus tinygltf, tinyexr, stb_image, nlohmann_json, GLFW, gflags, ZLIB and Threads.
   * `sh_renderer_main` (the viewer) links `sh_renderer_gltf`.
-  * Tests: `sh_renderer_core_test` (camera, cascade, culling, scene, shader, log, file_reader; no GL context) links the core; `sh_renderer_test` (loader, loader_layers, window, input, interaction, shader_gl: everything needing GLFW or a context) links the glTF target.
+  * Tests: `sh_renderer_core_test` (camera, cascade, culling, scene, shader, log, file_reader; no GL context) links the core; `sh_renderer_test` (loader, loader_layers, window, input, interaction, shader_gl, frame: everything needing GLFW or a context) links the glTF target.
 * **Options:**
   * `SH_RENDERER_BUILD_GLTF` (ON): builds the glTF target, the viewer and `sh_renderer_test`, and is the only place gflags, glfw3, tinygltf, tinyexr, stb_image and nlohmann/json are looked for.
   * `SH_RENDERER_BUILD_TESTS` (ON): looks for GoogleTest and builds the test binaries. A host embedding the core (`add_subdirectory`) turns both off and gets only `sh_renderer_core`.
@@ -81,6 +81,14 @@ The engine uses a Forward+ architecture. Do not suggest or write code for Deferr
 * **Step 1: Window & OpenGL 4.6 Context**
 * **Goal:** Initialize your windowing library (GLFW), implement camera interactions, load the OpenGL 4.6 Core profile, and establish the main render loop.
 * **Verification:** A clear screen with a specific clear color. No legacy OpenGL errors are thrown.
+* **Frame API (current):** the render loop is inverted so a host (the viewer, or ioquake3's `renderer_sh` module) owns the window, the GL context, input and the swap, and drives the renderer one frame at a time (`src/frame.h`):
+  * `CreateRenderer(&error)` builds every program through the default file reader and the size-independent resources, then enables `GL_FRAMEBUFFER_SRGB`. On failure it returns null with one line per failed program (name, files, and the missing file or the driver's info log) and leaves the GL state alone.
+  * `BeginFrame(r, width, height)` makes or resizes the size-dependent targets and sets the viewport; it returns false for a 0x0 drawable (a minimised window), and the host skips the frame.
+  * `RenderScene(r, scene, camera, time_seconds)` clears the HDR target to `clear_color` and, with a scene, runs the shadow, depth, SSAO, light culling, radiance and sky passes. The scene may be null.
+  * `EndFrame(r)` tonemaps into framebuffer 0 without swapping, then unbinds the program, vertex array and texture unit 0 and disables depth testing; other state is as the last pass left it (documented in `frame.h`).
+  * `DestroyRenderer(std::move(r))` deletes the GL objects with the context current.
+  * **Display gamma:** the tonemap raises the sRGB-encoded colour e to e^(1/g). `SetDisplayGamma` clamps g to [0.5, 3.0] like stock `r_gamma`, and a non-finite or non-positive g becomes 1 with one warning. At 1 the output is the plain tonemap.
+* **Engine facade (`src/engine_api.h`):** the only header an engine translation unit includes. It uses standard types and an opaque `ShRenderer*`, so engine code sees no Eigen, glad or core compiler flags: `ShCreate(ShHostServices)` (GL loader, version check for 4.6, log/fatal sink and file reader; `ShLastError()` on failure), `ShBeginFrame`, `ShEndFrame`, `ShSetClearColor`, `ShSetDisplayGamma`, `ShReadPixels` and `ShDestroy`. `ShEmbeddedReader()` and `ShHasEmbeddedGlsl()` give the host the built-in GLSL reader (always missing without `SH_RENDERER_EMBED_GLSL`), so it can install or wrap it without including core headers.
 
 
 * **Step 2: DSA Abstractions**

@@ -11,21 +11,30 @@
 
 namespace sh_renderer {
 
-ShaderProgram CreateShadowMapOpaqueProgram() {
-  auto program =
-      ShaderProgram::CreateGraphics("glsl/depth.vert", "glsl/depth.frag");
+ShaderProgram CreateShadowMapOpaqueProgram(std::string* error) {
+  std::string message;
+  auto program = ShaderProgram::CreateGraphics(
+      "glsl/depth.vert", "glsl/depth.frag", {}, /*reader=*/nullptr, &message);
   if (!program) {
-    LOG(ERROR) << "Failed to create opaque shadow map program.";
+    LOG(ERROR) << "Failed to create opaque shadow map program "
+                  "(glsl/depth.vert, glsl/depth.frag): "
+               << message;
+    if (error != nullptr) *error = std::move(message);
     return {};
   }
   return std::move(*program);
 }
 
-ShaderProgram CreateShadowMapCutoutProgram() {
+ShaderProgram CreateShadowMapCutoutProgram(std::string* error) {
+  std::string message;
   auto program = ShaderProgram::CreateGraphics(
-      "glsl/depth.vert", "glsl/depth.frag", {{"CUTOUT", "1"}});
+      "glsl/depth.vert", "glsl/depth.frag", {{"CUTOUT", "1"}},
+      /*reader=*/nullptr, &message);
   if (!program) {
-    LOG(ERROR) << "Failed to create cutout shadow map program.";
+    LOG(ERROR) << "Failed to create cutout shadow map program "
+                  "(glsl/depth.vert, glsl/depth.frag): "
+               << message;
+    if (error != nullptr) *error = std::move(message);
     return {};
   }
   return std::move(*program);

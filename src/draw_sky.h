@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "camera.h"
 #include "render_target.h"
 #include "scene.h"
@@ -13,7 +15,7 @@ const Eigen::Vector3f kSkyColor = Eigen::Vector3f(0.2, 0.5, 0.9);
  * @brief Creates a skybox shader program.
  * @return The skybox shader program.
  */
-ShaderProgram CreateSkyAnalyticProgram();
+ShaderProgram CreateSkyAnalyticProgram(std::string* error = nullptr);
 
 /**
  * @brief Draw the skybox to the render target.

@@ -26,7 +26,8 @@ option(SH_RENDERER_Q3_COORDINATE
        "Compile the core with Q3_COORDINATE (Z-up map units)" OFF)
 
 # --- Core library -------------------------------------------------------------
-# Passes, scene, compositor, shader loader, render targets and logging. It
+# Passes, scene, compositor, shader loader, render targets, logging, the
+# frame API (frame.h) and the engine facade (engine_api.h). It
 # links only OpenGL (through the bundled glad loader) and Eigen, so a host such
 # as the ioquake3 module can embed it without glog, gflags, GLFW, tinygltf or
 # tinyexr.
@@ -44,7 +45,9 @@ set(CORE_SOURCES
     src/draw_shadow_map.cpp
     src/draw_sky.cpp
     src/draw_tonemap.cpp
+    src/engine_api.cpp
     src/file_reader.cpp
+    src/frame.cpp
     src/glad.c
     src/log.cpp
     src/render_target.cpp
@@ -64,7 +67,9 @@ set(CORE_HEADERS
     src/draw_sky.h
     src/draw_ssao.h
     src/draw_tonemap.h
+    src/engine_api.h
     src/file_reader.h
+    src/frame.h
     src/glad.h
     src/khrplatform.h
     src/log.h
@@ -202,6 +207,7 @@ if(SH_RENDERER_BUILD_TESTS)
   # glTF-side tests: everything that needs GLFW, a GL context or the loader.
   if(SH_RENDERER_BUILD_GLTF)
     add_executable(sh_renderer_test
+        src/frame_test.cpp
         src/input_test.cpp
         src/interaction_test.cpp
         src/loader_layers_test.cpp

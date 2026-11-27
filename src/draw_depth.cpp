@@ -61,22 +61,31 @@ ShaderProgram CreateDepthCutoutProgram() {
   return std::move(*program);
 }
 
-ShaderProgram CreateDepthOpaqueWNormalProgram() {
+ShaderProgram CreateDepthOpaqueWNormalProgram(std::string* error) {
+  std::string message;
   auto program = ShaderProgram::CreateGraphics("glsl/depth_w_normal.vert",
-                                               "glsl/depth_w_normal.frag");
+                                               "glsl/depth_w_normal.frag", {},
+                                               /*reader=*/nullptr, &message);
   if (!program) {
-    LOG(ERROR) << "Failed to create depth shader program.";
+    LOG(ERROR) << "Failed to create depth shader program "
+                  "(glsl/depth_w_normal.vert, glsl/depth_w_normal.frag): "
+               << message;
+    if (error != nullptr) *error = std::move(message);
     return {};
   }
   return std::move(*program);
 }
 
-ShaderProgram CreateDepthCutoutWNormalProgram() {
-  auto program = ShaderProgram::CreateGraphics("glsl/depth_w_normal.vert",
-                                               "glsl/depth_w_normal.frag",
-                                               {{"CUTOUT", "1"}});
+ShaderProgram CreateDepthCutoutWNormalProgram(std::string* error) {
+  std::string message;
+  auto program = ShaderProgram::CreateGraphics(
+      "glsl/depth_w_normal.vert", "glsl/depth_w_normal.frag", {{"CUTOUT", "1"}},
+      /*reader=*/nullptr, &message);
   if (!program) {
-    LOG(ERROR) << "Failed to create depth shader program.";
+    LOG(ERROR) << "Failed to create depth shader program "
+                  "(glsl/depth_w_normal.vert, glsl/depth_w_normal.frag): "
+               << message;
+    if (error != nullptr) *error = std::move(message);
     return {};
   }
   return std::move(*program);

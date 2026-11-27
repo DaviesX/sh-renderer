@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <vector>
 
 #include "camera.h"
@@ -8,8 +9,9 @@
 
 namespace sh_renderer {
 
-ShaderProgram CreateSSAOProgram();
-ShaderProgram CreateSSAOBlurProgram(bool horizontal);
+ShaderProgram CreateSSAOProgram(std::string* error = nullptr);
+ShaderProgram CreateSSAOBlurProgram(bool horizontal,
+                                    std::string* error = nullptr);
 ShaderProgram CreateSSAOVisualizerProgram();
 
 struct SSAOContext {
