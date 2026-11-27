@@ -1,8 +1,9 @@
 #include "shader.h"
 
-#include <fstream>
-#include <iostream>
+#include <algorithm>
+#include <initializer_list>
 #include <sstream>
+#include <utility>
 
 #include "log.h"
 
@@ -12,20 +13,43 @@ namespace {
 constexpr int kMaxIncludeDepth = 16;
 constexpr std::string_view kIncludeDirective = "#include";
 
-std::string ReadFile(const std::filesystem::path& path) {
-  std::ifstream f(path);
-  if (!f.is_open()) {
-    LOG(ERROR) << "Failed to open shader file: " << path;
-    return "";
+// Reports a failure to `*error` when the caller asked for it, and logs it
+// otherwise.
+void ReportError(std::string message, std::string* error) {
+  if (error != nullptr) {
+    *error = std::move(message);
+  } else {
+    LOG(ERROR) << message;
   }
-  std::stringstream buffer;
-  buffer << f.rdbuf();
-  return buffer.str();
 }
 
+std::string ShaderInfoLog(GLuint shader) {
+  GLint length = 0;
+  glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &length);
+  std::string log(static_cast<size_t>(std::max(length, 1)), '\0');
+  GLsizei written = 0;
+  glGetShaderInfoLog(shader, static_cast<GLsizei>(log.size()), &written,
+                     log.data());
+  log.resize(static_cast<size_t>(std::max(written, 0)));
+  return log;
+}
+
+std::string ProgramInfoLog(GLuint program) {
+  GLint length = 0;
+  glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
+  std::string log(static_cast<size_t>(std::max(length, 1)), '\0');
+  GLsizei written = 0;
+  glGetProgramInfoLog(program, static_cast<GLsizei>(log.size()), &written,
+                      log.data());
+  log.resize(static_cast<size_t>(std::max(written, 0)));
+  return log;
+}
+
+// Compiles one stage. Returns 0 and sets `*error` on failure.
 GLuint CompileShader(GLenum type, const std::string& source,
                      const std::string& name,
-                     const std::map<std::string, std::string>& macros) {
+                     const std::map<std::string, std::string>& macros,
+                     std::string* error) {
   std::string final_source = source;
   if (!macros.empty()) {
     std::ostringstream macro_stream;
@@ -55,19 +79,67 @@ GLuint CompileShader(GLenum type, const std::string& source,
   GLint success;
   glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
   if (!success) {
-    char info_log[1024];
-    glGetShaderInfoLog(shader, 1024, nullptr, info_log);
-    LOG(ERROR) << "Failed to compile shader (" << name << "):\n" << info_log;
+    *error =
+        "Failed to compile shader (" + name + "):\n" + ShaderInfoLog(shader);
     glDeleteShader(shader);
     return 0;
   }
   return shader;
 }
 
-std::string ExpandIncludes(std::string_view source,
-                           const std::filesystem::path& base_dir, int depth) {
+// Links the given compiled stages into a program and flags the stages for
+// deletion. Returns 0 and sets `*error` on failure.
+GLuint LinkProgram(std::initializer_list<GLuint> shaders,
+                   const std::string& name, std::string* error) {
+  GLuint program = glCreateProgram();
+  for (GLuint shader : shaders) glAttachShader(program, shader);
+  glLinkProgram(program);
+  for (GLuint shader : shaders) glDeleteShader(shader);
+
+  GLint success;
+  glGetProgramiv(program, GL_LINK_STATUS, &success);
+  if (!success) {
+    *error =
+        "Failed to link program (" + name + "):\n" + ProgramInfoLog(program);
+    glDeleteProgram(program);
+    return 0;
+  }
+  return program;
+}
+
+// Compiles and links a vertex + fragment program from resolved sources.
+// Returns 0 and sets `*error` on failure.
+GLuint BuildGraphics(const std::string& vertex_source,
+                     const std::string& vertex_name,
+                     const std::string& fragment_source,
+                     const std::string& fragment_name,
+                     const std::map<std::string, std::string>& macros,
+                     std::string* error) {
+  GLuint vertex_shader = CompileShader(GL_VERTEX_SHADER, vertex_source,
+                                       vertex_name, macros, error);
+  if (!vertex_shader) return 0;
+
+  GLuint fragment_shader = CompileShader(GL_FRAGMENT_SHADER, fragment_source,
+                                         fragment_name, macros, error);
+  if (!fragment_shader) {
+    glDeleteShader(vertex_shader);
+    return 0;
+  }
+
+  return LinkProgram({vertex_shader, fragment_shader},
+                     vertex_name + ", " + fragment_name, error);
+}
+
+std::optional<std::string> ReadThrough(const FileReader& reader,
+                                       std::string_view path) {
+  if (!reader) return std::nullopt;
+  return reader(path);
+}
+
+std::string ExpandIncludes(std::string_view source, std::string_view dir,
+                           const FileReader& reader, int depth) {
   if (depth > kMaxIncludeDepth) {
-    LOG(ERROR) << "Shader #include nesting too deep (under " << base_dir << ")";
+    LOG(ERROR) << "Shader #include nesting too deep (under \"" << dir << "\")";
     return std::string(source);
   }
 
@@ -101,19 +173,55 @@ std::string ExpandIncludes(std::string_view source,
 
     std::string include_file_path =
         line.substr(file_name_start + 1, file_name_end - file_name_start - 1);
-    std::filesystem::path inc_path = base_dir / include_file_path;
-    std::string inc_src = ReadFile(inc_path);
-    out << ExpandIncludes(inc_src, inc_path.parent_path(), depth + 1) << "\n";
+    std::string inc_path = JoinReaderPath(dir, include_file_path);
+    std::optional<std::string> inc_src = ReadThrough(reader, inc_path);
+    if (!inc_src) {
+      LOG(ERROR) << "Failed to open shader file: \"" << inc_path << "\"";
+    }
+    out << ExpandIncludes(inc_src.value_or(""), ReaderPathDirectory(inc_path),
+                          reader, depth + 1)
+        << "\n";
   }
 
   return out.str();
+}
+
+// Reads and resolves a shader file, reporting a missing or empty file.
+std::optional<std::string> LoadSource(const std::string& path,
+                                      const FileReader& reader,
+                                      std::string* error) {
+  std::optional<std::string> src = ReadThrough(reader, path);
+  if (!src || src->empty()) {
+    *error = "Failed to open shader file: \"" + path + "\"";
+    return std::nullopt;
+  }
+  return ExpandIncludes(*src, ReaderPathDirectory(path), reader, /*depth=*/0);
+}
+
+const FileReader& ReaderOrDefault(const FileReader* reader) {
+  return reader != nullptr ? *reader : DefaultFileReader();
 }
 
 }  // namespace
 
 std::string ResolveShaderIncludes(std::string_view source,
                                   const std::filesystem::path& base_dir) {
-  return ExpandIncludes(source, base_dir, /*depth=*/0);
+  return ExpandIncludes(source, "", MakeDiskReader(base_dir), /*depth=*/0);
+}
+
+std::string ResolveShaderIncludes(std::string_view source,
+                                  std::string_view source_dir,
+                                  const FileReader& reader) {
+  return ExpandIncludes(source, source_dir, reader, /*depth=*/0);
+}
+
+std::optional<std::string> LoadShaderSource(std::string_view path,
+                                            const FileReader& reader) {
+  std::string error;
+  std::optional<std::string> src =
+      LoadSource(std::string(path), reader, &error);
+  if (!src) LOG(ERROR) << error;
+  return src;
 }
 
 ShaderProgram::ShaderProgram(ShaderProgram&& other) noexcept : id_(other.id_) {
@@ -135,84 +243,77 @@ ShaderProgram::~ShaderProgram() {
 
 std::optional<ShaderProgram> ShaderProgram::CreateCompute(
     const std::filesystem::path& compute_path,
-    const std::map<std::string, std::string>& macros) {
-  std::string compute_src = ReadFile(compute_path);
-  if (compute_src.empty()) return std::nullopt;
-  compute_src = ResolveShaderIncludes(compute_src, compute_path.parent_path());
+    const std::map<std::string, std::string>& macros, const FileReader* reader,
+    std::string* error) {
+  const FileReader& files = ReaderOrDefault(reader);
+  const std::string compute_name = compute_path.generic_string();
+  std::string message;
 
-  GLuint compute_shader = CompileShader(GL_COMPUTE_SHADER, compute_src,
-                                        compute_path.string(), macros);
-  if (!compute_shader) return std::nullopt;
-
-  GLuint program = glCreateProgram();
-  glAttachShader(program, compute_shader);
-  glLinkProgram(program);
-
-  // Flag shader for deletion when program is deleted
-  glDeleteShader(compute_shader);
-
-  GLint success;
-  glGetProgramiv(program, GL_LINK_STATUS, &success);
-  if (!success) {
-    char info_log[1024];
-    glGetProgramInfoLog(program, 1024, nullptr, info_log);
-    LOG(ERROR) << "Failed to link compute program:\n" << info_log;
-    glDeleteProgram(program);
+  std::optional<std::string> compute_src =
+      LoadSource(compute_name, files, &message);
+  if (!compute_src) {
+    ReportError(std::move(message), error);
     return std::nullopt;
   }
 
+  GLuint compute_shader = CompileShader(GL_COMPUTE_SHADER, *compute_src,
+                                        compute_name, macros, &message);
+  if (!compute_shader) {
+    ReportError(std::move(message), error);
+    return std::nullopt;
+  }
+
+  GLuint program = LinkProgram({compute_shader}, compute_name, &message);
+  if (!program) {
+    ReportError(std::move(message), error);
+    return std::nullopt;
+  }
   return ShaderProgram(program);
 }
 
 std::optional<ShaderProgram> ShaderProgram::CreateGraphics(
     const std::filesystem::path& vertex_path,
     const std::filesystem::path& fragment_path,
-    const std::map<std::string, std::string>& macros) {
-  std::string vertex_src = ReadFile(vertex_path);
-  if (vertex_src.empty()) return std::nullopt;
-  vertex_src = ResolveShaderIncludes(vertex_src, vertex_path.parent_path());
+    const std::map<std::string, std::string>& macros, const FileReader* reader,
+    std::string* error) {
+  const FileReader& files = ReaderOrDefault(reader);
+  const std::string vertex_name = vertex_path.generic_string();
+  const std::string fragment_name = fragment_path.generic_string();
+  std::string message;
 
-  std::string fragment_src = ReadFile(fragment_path);
-  if (fragment_src.empty()) return std::nullopt;
-  fragment_src =
-      ResolveShaderIncludes(fragment_src, fragment_path.parent_path());
+  std::optional<std::string> vertex_src =
+      LoadSource(vertex_name, files, &message);
+  if (!vertex_src) {
+    ReportError(std::move(message), error);
+    return std::nullopt;
+  }
+  std::optional<std::string> fragment_src =
+      LoadSource(fragment_name, files, &message);
+  if (!fragment_src) {
+    ReportError(std::move(message), error);
+    return std::nullopt;
+  }
 
-  return CreateFromSource(vertex_src, fragment_src, macros);
+  GLuint program = BuildGraphics(*vertex_src, vertex_name, *fragment_src,
+                                 fragment_name, macros, &message);
+  if (!program) {
+    ReportError(std::move(message), error);
+    return std::nullopt;
+  }
+  return ShaderProgram(program);
 }
 
 std::optional<ShaderProgram> ShaderProgram::CreateFromSource(
     std::string_view vertex_source, std::string_view fragment_source,
-    const std::map<std::string, std::string>& macros) {
-  GLuint vertex_shader = CompileShader(
-      GL_VERTEX_SHADER, std::string(vertex_source), "Vertex Source", macros);
-  if (!vertex_shader) return std::nullopt;
-
-  GLuint fragment_shader =
-      CompileShader(GL_FRAGMENT_SHADER, std::string(fragment_source),
-                    "Fragment Source", macros);
-  if (!fragment_shader) {
-    glDeleteShader(vertex_shader);
+    const std::map<std::string, std::string>& macros, std::string* error) {
+  std::string message;
+  GLuint program = BuildGraphics(std::string(vertex_source), "Vertex Source",
+                                 std::string(fragment_source),
+                                 "Fragment Source", macros, &message);
+  if (!program) {
+    ReportError(std::move(message), error);
     return std::nullopt;
   }
-
-  GLuint program = glCreateProgram();
-  glAttachShader(program, vertex_shader);
-  glAttachShader(program, fragment_shader);
-  glLinkProgram(program);
-
-  glDeleteShader(vertex_shader);
-  glDeleteShader(fragment_shader);
-
-  GLint success;
-  glGetProgramiv(program, GL_LINK_STATUS, &success);
-  if (!success) {
-    char info_log[1024];
-    glGetProgramInfoLog(program, 1024, nullptr, info_log);
-    LOG(ERROR) << "Failed to link graphics program:\n" << info_log;
-    glDeleteProgram(program);
-    return std::nullopt;
-  }
-
   return ShaderProgram(program);
 }
 
