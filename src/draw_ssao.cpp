@@ -1,10 +1,9 @@
 #include "draw_ssao.h"
 
-#include <glog/logging.h>
-
 #include <random>
 
 #include "glad.h"
+#include "log.h"
 
 namespace sh_renderer {
 

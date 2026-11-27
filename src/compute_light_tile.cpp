@@ -1,8 +1,7 @@
 #include "compute_light_tile.h"
 
-#include <glog/logging.h>
-
 #include "glad.h"
+#include "log.h"
 
 namespace sh_renderer {
 namespace {

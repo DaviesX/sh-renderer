@@ -1,11 +1,10 @@
 #include "draw_shadow_map.h"
 
-#include <glog/logging.h>
-
 #include "camera.h"
 #include "cascade.h"
 #include "culling.h"
 #include "glad.h"
+#include "log.h"
 #include "render_target.h"
 #include "scene.h"
 #include "shader.h"

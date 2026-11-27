@@ -1,9 +1,8 @@
 #include "draw_sky.h"
 
-#include <glog/logging.h>
-
 #include "camera.h"
 #include "glad.h"
+#include "log.h"
 
 namespace sh_renderer {
 namespace {

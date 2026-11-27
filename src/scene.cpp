@@ -1,6 +1,5 @@
 #include "scene.h"
 
-#include <glog/logging.h>
 #include <tinyexr.h>
 
 #include <algorithm>
@@ -11,6 +10,7 @@
 
 #include "camera.h"
 #include "glad.h"
+#include "log.h"
 
 namespace sh_renderer {
 
@@ -542,7 +542,8 @@ void UploadSceneToGPU(Scene& scene) {
     // (the draw selects the active frame on the CPU).
     for (auto& layer : mat.layers) {
       if (layer.anim_frames.empty()) {
-        if (layer.texture.texture_id == 0 && !layer.texture.pixel_data.empty()) {
+        if (layer.texture.texture_id == 0 &&
+            !layer.texture.pixel_data.empty()) {
           layer.texture.texture_id = CreateTexture2D(layer.texture, true);
         }
       } else {

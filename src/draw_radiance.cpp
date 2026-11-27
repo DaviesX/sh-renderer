@@ -1,7 +1,5 @@
 #include "draw_radiance.h"
 
-#include <glog/logging.h>
-
 #include <algorithm>
 #include <cmath>
 
@@ -10,6 +8,7 @@
 #include "culling.h"
 #include "draw_sky.h"
 #include "glad.h"
+#include "log.h"
 #include "shader.h"
 #include "ssbo.h"
 
@@ -20,8 +19,8 @@ namespace {
 const char* kRadianceVertex = "glsl/radiance.vert";
 const char* kRadianceFragment = "glsl/radiance.frag";
 
-// Layer sampler array base unit; must match `layout(binding=16)` for u_layers in
-// q3_composite.glsl.
+// Layer sampler array base unit; must match `layout(binding=16)` for u_layers
+// in q3_composite.glsl.
 constexpr int kLayerSamplerBase = 16;
 
 // Binds a layered material's stage textures to u_layers[0..], selecting the
@@ -171,7 +170,8 @@ void DrawSceneRadiance(const Scene& scene, const Camera& camera,
 
   for (const auto& geo : scene.geometries) {
     if (geo.vao == 0) continue;
-    if (geo.material_id < 0) continue;  // pure occluder shell — shadow/depth only
+    // A pure occluder shell is drawn in the shadow and depth passes only.
+    if (geo.material_id < 0) continue;
     if (!IsAABBInFrustum(geo.bounding_box, planes)) continue;
 
     program.Uniform("u_model", geo.transform.matrix());

@@ -1,11 +1,10 @@
 #include "interaction.h"
 
-#include <glog/logging.h>
-
 #include <algorithm>
 
 #include "camera.h"
 #include "input.h"
+#include "log.h"
 
 namespace sh_renderer {
 

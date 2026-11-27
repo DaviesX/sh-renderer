@@ -1,6 +1,6 @@
 #include "render_target.h"
 
-#include <glog/logging.h>
+#include "log.h"
 
 namespace sh_renderer {
 
