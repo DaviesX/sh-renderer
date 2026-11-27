@@ -4,7 +4,7 @@ You are assisting in the development of a custom 3D rendering engine built from 
 ## Tips
 - Build and test the project using the following commands:
 ```bash
-cmake -DCMAKE_BUILD_TYPE=Release -B build -S . && cmake --build build --parallel 12 && ./build/sh_renderer_test
+cmake -DCMAKE_BUILD_TYPE=Release -B build -S . && cmake --build build --parallel 12 && ./build/sh_renderer_core_test && ./build/sh_renderer_test
 ```
 - **Coding Style:** google c++ style guide. Prefer free functions over classes unless the states are complex.
 - **Language:** C++20
@@ -12,14 +12,14 @@ cmake -DCMAKE_BUILD_TYPE=Release -B build -S . && cmake --build build --parallel
 ## Technology Stack
 - **Build System** CMake
 - **Testing Framework:** googletest (find_package)
-- **Logging Library:** glog (find_package)
-- **Command Line Argument Parsing:** gflags (find_package)
-- **Graphics API:** OpenGL 4.6 Core Profile, glfw3 (find_package).
+- **Logging:** the in-tree shim `src/log.h` (glog-style `LOG`, `LOG_EVERY_N`, `CHECK*`, `DCHECK` over a sink the host installs; the default sink writes to stderr and aborts on fatal). glog is not used.
+- **Command Line Argument Parsing:** gflags (find_package), viewer only.
+- **Graphics API:** OpenGL 4.6 Core Profile through the bundled glad loader. glfw3 (find_package) is the viewer's and the glTF tests' window library only; the core never calls GLFW.
 - **Shading Language:** GLSL 460 core.
 - **Math Library:** Eigen3 (find_package)
-- **glTF Loader:** tinygltf (find_path & add_library)
-- **JSON Library:** nlohmann/json (find_path & add_library)
-- **Image Library:** stb_image, tinyexr (find_path & add_library)
+- **glTF Loader:** tinygltf (find_path & add_library), glTF target only.
+- **JSON Library:** nlohmann/json (find_path & add_library), glTF target only.
+- **Image Library:** stb_image, tinyexr (find_path & add_library), glTF target only.
 
 
 ## Strict Architectural Directives
@@ -59,9 +59,20 @@ The engine uses a Forward+ architecture. Do not suggest or write code for Deferr
 * **Step 0: CMake Project Setup**
 * **Goal:** Initialize a CMake project with a basic build configuration. Source files go to the `src` directory.
 * **Verification:** A successful build with no errors.
+* **Targets (current layout):**
+  * `sh_renderer_core` (STATIC, `POSITION_INDEPENDENT_CODE ON`, so it can link into a shared module such as ioquake3's `renderer_sh`): camera, cascade, culling, the draw passes and light culling, glad, render targets, scene, shader loader, SSBOs, the logging shim and the file reader. It links only OpenGL and Eigen. It must never link or include glog, gflags, GLFW, tinygltf, tinyexr, Embree or stb_image's implementation.
+  * `sh_renderer_gltf` (STATIC): the glTF loader, `gltf_scene_io` (EXR lightmaps, `ComputeLightRadius`), `implementations.cpp` (tinygltf, stb_image and tinyexr implementations), window, input and interaction. It links the core plus tinygltf, tinyexr, stb_image, nlohmann_json, GLFW, gflags, ZLIB and Threads.
+  * `sh_renderer_main` (the viewer) links `sh_renderer_gltf`.
+  * Tests: `sh_renderer_core_test` (camera, cascade, culling, scene, shader, log, file_reader; no GL context) links the core; `sh_renderer_test` (loader, loader_layers, window, input, interaction, shader_gl: everything needing GLFW or a context) links the glTF target.
+* **Options:**
+  * `SH_RENDERER_BUILD_GLTF` (ON): builds the glTF target, the viewer and `sh_renderer_test`, and is the only place gflags, glfw3, tinygltf, tinyexr, stb_image and nlohmann/json are looked for.
+  * `SH_RENDERER_BUILD_TESTS` (ON): looks for GoogleTest and builds the test binaries. A host embedding the core (`add_subdirectory`) turns both off and gets only `sh_renderer_core`.
+  * `SH_RENDERER_EMBED_GLSL` (OFF): builds `glsl/` into the core (`MakeEmbeddedReader`).
+  * `SH_RENDERER_Q3_COORDINATE` (OFF): defines `Q3_COORDINATE` (Z-up Quake 3 map units) as a PUBLIC compile definition of the core, so the core's translation units and every target that links it (tests, the engine glue) see the same macro. The viewer and the tests build with it off.
+* Release builds use `-O3 -march=native` for every target.
 
 * **Step 0.5: Main Entry**
-* **Goal:** Add a `src/main.cpp`. The program accept an argument `--input` that specifies the path to a glTF scene file. Initializes GLOG and GFLAGS properly. Set namespace to `sh_renderer`.
+* **Goal:** Add a `src/main.cpp`. The program accept an argument `--input` that specifies the path to a glTF scene file. Parses flags with gflags; logging goes through `src/log.h`'s default stderr sink. Set namespace to `sh_renderer`.
 * **Verification:** A successful build with no errors.
 
 
