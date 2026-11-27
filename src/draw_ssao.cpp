@@ -46,26 +46,36 @@ float Lerp(float a, float b, float f) { return a + f * (b - a); }
 
 }  // namespace
 
-ShaderProgram CreateSSAOProgram() {
+ShaderProgram CreateSSAOProgram(std::string* error) {
+  std::string message;
   auto program = ShaderProgram::CreateGraphics(
       "glsl/fullscreen.vert", "glsl/ssao.frag",
-      {{"MAX_SAMPLES", std::to_string(kKernelSize)}});
+      {{"MAX_SAMPLES", std::to_string(kKernelSize)}}, /*reader=*/nullptr,
+      &message);
   if (!program) {
-    LOG(ERROR) << "Failed to create SSAO shader program.";
+    LOG(ERROR) << "Failed to create SSAO shader program (glsl/fullscreen.vert, "
+                  "glsl/ssao.frag): "
+               << message;
+    if (error != nullptr) *error = std::move(message);
     return {};
   }
   return std::move(*program);
 }
 
-ShaderProgram CreateSSAOBlurProgram(bool horizontal) {
+ShaderProgram CreateSSAOBlurProgram(bool horizontal, std::string* error) {
   std::map<std::string, std::string> macros;
   if (horizontal) {
     macros["HORIZONTAL"] = "1";
   }
+  std::string message;
   auto program = ShaderProgram::CreateGraphics(
-      "glsl/fullscreen.vert", "glsl/bilateral_blur.frag", macros);
+      "glsl/fullscreen.vert", "glsl/bilateral_blur.frag", macros,
+      /*reader=*/nullptr, &message);
   if (!program) {
-    LOG(ERROR) << "Failed to create SSAO blur shader program.";
+    LOG(ERROR) << "Failed to create SSAO blur shader program "
+                  "(glsl/fullscreen.vert, glsl/bilateral_blur.frag): "
+               << message;
+    if (error != nullptr) *error = std::move(message);
     return {};
   }
   return std::move(*program);

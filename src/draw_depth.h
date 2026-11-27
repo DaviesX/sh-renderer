@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "camera.h"
 #include "render_target.h"
 #include "scene.h"
@@ -15,11 +17,11 @@ ShaderProgram CreateDepthCutoutProgram();
 
 // Creates the depth pre-pass shader program for opaque materials with
 // view-space normal output.
-ShaderProgram CreateDepthOpaqueWNormalProgram();
+ShaderProgram CreateDepthOpaqueWNormalProgram(std::string* error = nullptr);
 
 // Creates the depth pre-pass shader program for cutout materials with
 // view-space normal output.
-ShaderProgram CreateDepthCutoutWNormalProgram();
+ShaderProgram CreateDepthCutoutWNormalProgram(std::string* error = nullptr);
 
 // Creates the depth visualization shader program.
 ShaderProgram CreateDepthVisualizerProgram();

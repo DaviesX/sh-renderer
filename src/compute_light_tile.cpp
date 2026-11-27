@@ -14,13 +14,14 @@ const char* kLightCullCompute = "glsl/light_cull.comp";
 
 }  // namespace
 
-ShaderProgram CreateLightCullProgram() {
-  std::string error;
+ShaderProgram CreateLightCullProgram(std::string* error) {
+  std::string message;
   auto program = ShaderProgram::CreateCompute(kLightCullCompute, {},
-                                              /*reader=*/nullptr, &error);
+                                              /*reader=*/nullptr, &message);
   if (!program) {
     LOG(ERROR) << "Failed to create light cull compute shader program ("
-               << kLightCullCompute << "): " << error;
+               << kLightCullCompute << "): " << message;
+    if (error != nullptr) *error = std::move(message);
     return {};
   }
   return std::move(*program);

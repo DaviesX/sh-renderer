@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "camera.h"
 #include "cascade.h"
 #include "render_target.h"
@@ -9,10 +11,10 @@
 namespace sh_renderer {
 
 // Creates a shadow map shader program for opaque objects.
-ShaderProgram CreateShadowMapOpaqueProgram();
+ShaderProgram CreateShadowMapOpaqueProgram(std::string* error = nullptr);
 
 // Creates a shadow map shader program for cutout objects.
-ShaderProgram CreateShadowMapCutoutProgram();
+ShaderProgram CreateShadowMapCutoutProgram(std::string* error = nullptr);
 
 // Creates cascaded shadow map targets.
 std::vector<RenderTarget> CreateCascadedShadowMapTargets();

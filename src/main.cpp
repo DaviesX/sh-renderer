@@ -1,20 +1,16 @@
 #include <gflags/gflags.h>
 
+#include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <string>
+#include <vector>
 
-#include "compute_light_tile.h"
-#include "draw_depth.h"
-#include "draw_radiance.h"
-#include "draw_shadow_map.h"
-#include "draw_sky.h"
-#include "draw_ssao.h"
-#include "draw_tonemap.h"
+#include "frame.h"
 #include "input.h"
 #include "interaction.h"
 #include "loader.h"
 #include "log.h"
-#include "render_target.h"
 #include "scene.h"
 #include "window.h"
 
@@ -24,8 +20,36 @@ DEFINE_uint32(height, 720, "Height of the window.");
 DEFINE_uint32(msaa_samples, 0, "Number of MSAA samples.");
 DEFINE_uint32(log_frame_time_interval, 100,
               "Log average frame time every N frames.");
+DEFINE_uint32(readback_frame, 0,
+              "Read back the default framebuffer of this presented frame "
+              "(1-based) to --readback_path, then exit. 0 disables it.");
+DEFINE_string(readback_path, "",
+              "Binary PPM file written by --readback_frame.");
+DEFINE_double(display_gamma, 1.0,
+              "Display gamma g applied in the tonemap: the framebuffer stores "
+              "e^(1/g), with e the sRGB encoding of the tonemapped colour.");
 
 namespace sh_renderer {
+
+// Reads the default framebuffer's back buffer and writes it as a binary PPM,
+// top row first.
+bool WriteFramebufferPPM(int width, int height, const std::string& path) {
+  std::vector<uint8_t> pixels(static_cast<size_t>(width) * height * 3);
+  ReadDefaultFramebufferRGB(width, height, pixels.data());
+
+  std::ofstream out(path, std::ios::binary);
+  if (!out) {
+    LOG(ERROR) << "Failed to open readback file: " << path;
+    return false;
+  }
+  out << "P6\n" << width << " " << height << "\n255\n";
+  const size_t row_bytes = static_cast<size_t>(width) * 3;
+  for (int y = height - 1; y >= 0; --y) {
+    out.write(reinterpret_cast<const char*>(pixels.data() + y * row_bytes),
+              static_cast<std::streamsize>(row_bytes));
+  }
+  return static_cast<bool>(out);
+}
 
 void Run(const std::filesystem::path& scene_path) {
   LOG(INFO) << "Loading scene: " << scene_path;
@@ -53,58 +77,13 @@ void Run(const std::filesystem::path& scene_path) {
   LogScene(*scene);
   UploadSceneToGPU(*scene);
 
-  ShaderProgram cascaded_shadow_map_opaque_program =
-      CreateShadowMapOpaqueProgram();
-  ShaderProgram cascaded_shadow_map_cutout_program =
-      CreateShadowMapCutoutProgram();
-  ShaderProgram depth_opaque_program = CreateDepthOpaqueWNormalProgram();
-  ShaderProgram depth_cutout_program = CreateDepthCutoutWNormalProgram();
-  ShaderProgram depth_vis_program = CreateDepthVisualizerProgram();
-  ShaderProgram shadow_vis_program = CreateShadowMapVisualizationProgram();
-  ShaderProgram radiance_program = CreateRadianceProgram();
-  ShaderProgram sky_program = CreateSkyAnalyticProgram();
-  ShaderProgram tonemap_program = CreateTonemapProgram();
-  ShaderProgram light_cull_program = CreateLightCullProgram();
-  ShaderProgram ssao_program = CreateSSAOProgram();
-  ShaderProgram ssao_blur_horizontal_program = CreateSSAOBlurProgram(true);
-  ShaderProgram ssao_blur_vertical_program = CreateSSAOBlurProgram(false);
-  ShaderProgram ssao_vis_program = CreateSSAOVisualizerProgram();
-
-  if (!cascaded_shadow_map_opaque_program ||
-      !cascaded_shadow_map_cutout_program || !depth_opaque_program ||
-      !depth_cutout_program || !depth_vis_program || !shadow_vis_program ||
-      !radiance_program || !sky_program || !tonemap_program ||
-      !light_cull_program || !ssao_program || !ssao_blur_horizontal_program ||
-      !ssao_blur_vertical_program || !ssao_vis_program) {
-    LOG(ERROR) << "Failed to create shader programs.";
+  std::string error;
+  std::unique_ptr<Renderer> renderer = CreateRenderer(&error);
+  if (!renderer) {
+    LOG(ERROR) << error;
     return;
   }
-
-  // Initial Render Targets
-  int initial_width, initial_height;
-  glfwGetFramebufferSize(*window, &initial_width, &initial_height);
-  RenderTarget framebuffer_target;
-  framebuffer_target.fbo = 0;
-  framebuffer_target.texture = 0;
-  framebuffer_target.depth_buffer = 0;
-  framebuffer_target.width = initial_width;
-  framebuffer_target.height = initial_height;
-  RenderTarget depth_normal_target =
-      CreateDepthAndNormalTarget(initial_width, initial_height);
-  RenderTarget hdr_target = CreateHDRTarget(initial_width, initial_height,
-                                            depth_normal_target.depth_buffer);
-  std::vector<RenderTarget> sun_shadow_map_targets =
-      CreateCascadedShadowMapTargets();
-  RenderTarget spot_shadow_atlas =
-      CreateShadowAtlasTarget(scene->shadow_atlas.resolution);
-  TileLightListList tile_light_list =
-      CreateTileLightList(initial_width, initial_height);
-
-  SSAOContext ssao_ctx = CreateSSAOContext();
-  RenderTarget ssao_target = CreateSSAOTarget(initial_width, initial_height);
-  RenderTarget ssao_blur_temp = CreateSSAOTarget(initial_width, initial_height);
-  RenderTarget ssao_blur_target =
-      CreateSSAOTarget(initial_width, initial_height);
+  SetDisplayGamma(*renderer, static_cast<float>(FLAGS_display_gamma));
 
   InputState input_state;
   InteractionState interaction_state;
@@ -123,93 +102,22 @@ void Run(const std::filesystem::path& scene_path) {
     // Get the current framebuffer size for the viewport.
     int fb_width, fb_height;
     glfwGetFramebufferSize(*window, &fb_width, &fb_height);
-    CHECK_GT(fb_width, 0);
-    CHECK_GT(fb_height, 0);
-
-    // Resize targets if needed
-    if (fb_width != hdr_target.width || fb_height != hdr_target.height) {
-      framebuffer_target.width = fb_width;
-      framebuffer_target.height = fb_height;
-
-      glDeleteFramebuffers(1, &depth_normal_target.fbo);
-      glDeleteTextures(1, &depth_normal_target.normal_texture);
-      glDeleteTextures(1, &depth_normal_target.depth_buffer);
-      depth_normal_target = CreateDepthAndNormalTarget(fb_width, fb_height);
-
-      glDeleteFramebuffers(1, &hdr_target.fbo);
-      glDeleteTextures(1, &hdr_target.texture);
-      hdr_target = CreateHDRTarget(fb_width, fb_height,
-                                   depth_normal_target.depth_buffer);
-
-      glDeleteFramebuffers(1, &ssao_target.fbo);
-      glDeleteTextures(1, &ssao_target.texture);
-      ssao_target = CreateSSAOTarget(fb_width, fb_height);
-
-      glDeleteFramebuffers(1, &ssao_blur_temp.fbo);
-      glDeleteTextures(1, &ssao_blur_temp.texture);
-      ssao_blur_temp = CreateSSAOTarget(fb_width, fb_height);
-
-      glDeleteFramebuffers(1, &ssao_blur_target.fbo);
-      glDeleteTextures(1, &ssao_blur_target.texture);
-      ssao_blur_target = CreateSSAOTarget(fb_width, fb_height);
+    if (!BeginFrame(*renderer, fb_width, fb_height)) {
+      // Minimised: nothing to draw until the window comes back.
+      glfwWaitEvents();
+      continue;
     }
 
-    glViewport(0, 0, fb_width, fb_height);
+    RenderScene(*renderer, &*scene, camera, glfwGetTime());
+    EndFrame(*renderer);
 
-    // Enable depth testing.
-    glEnable(GL_DEPTH_TEST);
-
-    // 0. Update dynamic light data and render shadow atlas
-    AllocateShadowMapForLights(*scene, camera);
-    UploadLightsToGPU(*scene);
-
-    DrawShadowAtlas(*scene, cascaded_shadow_map_opaque_program,
-                    cascaded_shadow_map_cutout_program, spot_shadow_atlas);
-
-    // 1. Depth Pre-pass
-    // Bind Depth+Normal target
-    glBindFramebuffer(GL_FRAMEBUFFER, depth_normal_target.fbo);
-    glClear(GL_DEPTH_BUFFER_BIT);  // Clear depth only
-    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-
-    std::vector<Cascade> sun_cascades;
-    if (scene->sun_light) {
-      sun_cascades = ComputeCascades(*(scene->sun_light), camera);
+    if (FLAGS_readback_frame != 0 && frame_count + 1 == FLAGS_readback_frame) {
+      if (WriteFramebufferPPM(fb_width, fb_height, FLAGS_readback_path)) {
+        LOG(INFO) << "Wrote frame " << FLAGS_readback_frame << " to "
+                  << FLAGS_readback_path;
+      }
+      should_close = true;
     }
-    DrawCascadedShadowMap(*scene, camera, cascaded_shadow_map_opaque_program,
-                          cascaded_shadow_map_cutout_program, sun_cascades,
-                          sun_shadow_map_targets);
-
-    DrawDepthWNormal(*scene, camera, depth_opaque_program, depth_cutout_program,
-                     depth_normal_target);
-
-    // 1.2 SSAO Pass
-    DrawSSAO(depth_normal_target, camera, ssao_program, ssao_ctx, ssao_target);
-    DrawSSAOBlur(ssao_target, camera, ssao_blur_horizontal_program,
-                 ssao_blur_vertical_program, depth_normal_target,
-                 ssao_blur_temp, ssao_blur_target);
-
-    // 1.5. Compute Light Culling (Forward+)
-    ComputeTileLightList(camera, hdr_target, *scene, light_cull_program,
-                         &tile_light_list);
-
-    // 2. Radiance Pass (Forward PBR)
-    // DrawRadiance will handle clearing color, setting LEQUAL, etc.
-    DrawSceneRadiance(*scene, camera, sun_shadow_map_targets, sun_cascades,
-                      spot_shadow_atlas, tile_light_list, ssao_blur_target,
-                      radiance_program, hdr_target,
-                      static_cast<float>(glfwGetTime()));
-
-    SunLight default_sun;
-    default_sun.direction = Eigen::Vector3f(0.5f, -1.0f, 0.1f).normalized();
-    default_sun.color = Eigen::Vector3f(1.0f, 1.0f, 1.0f);
-    default_sun.intensity = 1.0f;
-    SunLight active_sun = scene->sun_light.value_or(default_sun);
-
-    DrawSkyAnalytic(*scene, camera, active_sun, hdr_target, sky_program);
-
-    // 3. Tonemapping (to default framebuffer)
-    DrawTonemap(hdr_target, tonemap_program);
 
     glfwSwapBuffers(*window);
 
@@ -225,30 +133,8 @@ void Run(const std::filesystem::path& scene_path) {
     }
   }
 
+  DestroyRenderer(std::move(renderer));
   DestroyWindow(*window);
-
-  // Cleanup
-  glDeleteFramebuffers(1, &depth_normal_target.fbo);
-  glDeleteTextures(1, &depth_normal_target.normal_texture);
-  glDeleteTextures(1, &depth_normal_target.depth_buffer);
-
-  glDeleteFramebuffers(1, &hdr_target.fbo);
-  glDeleteTextures(1, &hdr_target.texture);
-
-  glDeleteFramebuffers(1, &ssao_target.fbo);
-  glDeleteTextures(1, &ssao_target.texture);
-  glDeleteFramebuffers(1, &ssao_blur_temp.fbo);
-  glDeleteTextures(1, &ssao_blur_temp.texture);
-  glDeleteFramebuffers(1, &ssao_blur_target.fbo);
-  glDeleteTextures(1, &ssao_blur_target.texture);
-  DestroySSAOContext(&ssao_ctx);
-  for (const auto& target : sun_shadow_map_targets) {
-    glDeleteFramebuffers(1, &target.fbo);
-    glDeleteTextures(1, &target.depth_buffer);
-  }
-  glDeleteFramebuffers(1, &spot_shadow_atlas.fbo);
-  glDeleteTextures(1, &spot_shadow_atlas.depth_buffer);
-  DestroyTileLightList(&tile_light_list);
 }
 
 }  // namespace sh_renderer
