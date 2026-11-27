@@ -1,5 +1,7 @@
 #include "draw_tonemap.h"
 
+#include <string>
+
 #include "glad.h"
 #include "log.h"
 
@@ -13,10 +15,12 @@ const char* kTonemapFragment = "glsl/tonemap.frag";
 }  // namespace
 
 ShaderProgram CreateTonemapProgram() {
-  auto program =
-      ShaderProgram::CreateGraphics(kTonemapVertex, kTonemapFragment);
+  std::string error;
+  auto program = ShaderProgram::CreateGraphics(kTonemapVertex, kTonemapFragment,
+                                               {}, /*reader=*/nullptr, &error);
   if (!program) {
-    LOG(FATAL) << "Failed to create tonemap shader program.";
+    LOG(ERROR) << "Failed to create tonemap shader program (" << kTonemapVertex
+               << ", " << kTonemapFragment << "): " << error;
     return {};
   }
   return std::move(*program);

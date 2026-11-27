@@ -1,5 +1,7 @@
 #include "draw_sky.h"
 
+#include <string>
+
 #include "camera.h"
 #include "glad.h"
 #include "log.h"
@@ -13,9 +15,12 @@ const char* kSkyFragment = "glsl/sky_analytic.frag";
 }  // namespace
 
 ShaderProgram CreateSkyAnalyticProgram() {
-  auto program = ShaderProgram::CreateGraphics(kSkyVertex, kSkyFragment);
+  std::string error;
+  auto program = ShaderProgram::CreateGraphics(kSkyVertex, kSkyFragment, {},
+                                               /*reader=*/nullptr, &error);
   if (!program) {
-    LOG(FATAL) << "Failed to create sky analytic shader program.";
+    LOG(ERROR) << "Failed to create sky analytic shader program (" << kSkyVertex
+               << ", " << kSkyFragment << "): " << error;
     return {};
   }
   return std::move(*program);

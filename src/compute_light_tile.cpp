@@ -1,5 +1,7 @@
 #include "compute_light_tile.h"
 
+#include <string>
+
 #include "glad.h"
 #include "log.h"
 
@@ -13,9 +15,12 @@ const char* kLightCullCompute = "glsl/light_cull.comp";
 }  // namespace
 
 ShaderProgram CreateLightCullProgram() {
-  auto program = ShaderProgram::CreateCompute(kLightCullCompute);
+  std::string error;
+  auto program = ShaderProgram::CreateCompute(kLightCullCompute, {},
+                                              /*reader=*/nullptr, &error);
   if (!program) {
-    LOG(FATAL) << "Failed to create light cull compute shader program.";
+    LOG(ERROR) << "Failed to create light cull compute shader program ("
+               << kLightCullCompute << "): " << error;
     return {};
   }
   return std::move(*program);

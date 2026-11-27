@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 #include "cascade.h"
 #include "compute_light_tile.h"
@@ -47,12 +48,16 @@ void BindMaterialLayers(const Material& mat, float time) {
 }  // namespace
 
 ShaderProgram CreateRadianceProgram() {
+  std::string error;
   auto program = ShaderProgram::CreateGraphics(
       kRadianceVertex, kRadianceFragment,
       {{"NUM_CASCADES", std::to_string(kNumShadowMapCascades)},
-       {"MAX_LAYERS", std::to_string(kMaxLayers)}});
+       {"MAX_LAYERS", std::to_string(kMaxLayers)}},
+      /*reader=*/nullptr, &error);
   if (!program) {
-    LOG(FATAL) << "Failed to create radiance shader program.";
+    LOG(ERROR) << "Failed to create radiance shader program ("
+               << kRadianceVertex << ", " << kRadianceFragment
+               << "): " << error;
     return {};
   }
   return std::move(*program);

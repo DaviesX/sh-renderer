@@ -17,6 +17,9 @@ add_link_options(
   # $<$<CONFIG:Debug>:-fsanitize=address>
 )
 
+option(SH_RENDERER_EMBED_GLSL
+       "Build glsl/ into the library (MakeEmbeddedReader)" OFF)
+
 # Dependencies
 find_package(GTest)
 find_package(gflags REQUIRED)
@@ -75,6 +78,7 @@ set(LIB_SOURCES
     src/draw_shadow_map.cpp
     src/draw_sky.cpp
     src/draw_tonemap.cpp
+    src/file_reader.cpp
     src/glad.c
     src/input.cpp
     src/interaction.cpp
@@ -97,6 +101,7 @@ set(LIB_HEADERS
     src/draw_radiance.h
     src/draw_shadow_map.h
     src/draw_sky.h
+    src/file_reader.h
     src/glad.h
     src/input.h
     src/interaction.h
@@ -112,6 +117,12 @@ add_library(sh_renderer SHARED ${LIB_SOURCES} ${LIB_HEADERS})
 target_include_directories(sh_renderer PUBLIC 
     src
 )
+if(SH_RENDERER_EMBED_GLSL)
+  include(cmake/embed_glsl.cmake)
+  sh_renderer_embed_glsl(sh_renderer)
+  target_sources(sh_renderer PRIVATE src/embedded_glsl.h)
+endif()
+
 target_link_libraries(sh_renderer PUBLIC
     gflags
     OpenGL::GL
@@ -141,15 +152,21 @@ add_executable(sh_renderer_test
     src/camera_test.cpp
     src/cascade_test.cpp
     src/culling_test.cpp
+    src/file_reader_test.cpp
     src/input_test.cpp
     src/interaction_test.cpp
     src/loader_layers_test.cpp
     src/loader_test.cpp
     src/log_test.cpp
     src/scene_test.cpp
+    src/shader_gl_test.cpp
     src/shader_test.cpp
     src/window_test.cpp
 )
+
+if(SH_RENDERER_EMBED_GLSL)
+  target_sources(sh_renderer_test PRIVATE src/embedded_glsl_test.cpp)
+endif()
 
 target_link_libraries(sh_renderer_test PRIVATE
     sh_renderer
